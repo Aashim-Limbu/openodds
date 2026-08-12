@@ -1,3 +1,4 @@
+import { Buffer } from 'buffer';
 import { useState } from 'react';
 import {
   GENESIS_SEED,
@@ -13,12 +14,15 @@ import {
 } from './midnight.ts';
 
 const rand32 = () => crypto.getRandomValues(new Uint8Array(32));
+const randId = () => rand32();
 const NATIVE = new Uint8Array(32);
 
 export function App() {
   const [lines, setLines] = useState<string[]>([]);
   const [seed, setSeed] = useState(GENESIS_SEED);
   const [address, setAddress] = useState('');
+  const [marketId, setMarketId] = useState('');
+  const [proofServer, setProofServer] = useState(config.proofServer);
   const [ctx, setCtx] = useState<WalletContext | null>(null);
   const [providers, setProviders] = useState<OpenOddsProviders | null>(null);
   const [busy, setBusy] = useState(false);
@@ -70,6 +74,8 @@ export function App() {
   });
 
   const connect = run('connect wallet', async () => {
+    config.proofServer = proofServer.trim();
+    log(`proof server: ${config.proofServer}`);
     const c = await buildWallet(seed.trim(), log);
     setCtx(c);
     const p = await configureProviders(c);
@@ -77,25 +83,59 @@ export function App() {
     log(`coin pk ${p.walletProvider.getCoinPublicKey()}`);
   });
 
-  const deploy = run('deploy market', async () => {
+  const deploy = run('deploy + createEvent + createMarket', async () => {
     if (!providers) throw new Error('connect first');
     const d = await deployMarket(providers, new Uint8Array(32).fill(7), rand32());
     const addr = d.deployTxData.public.contractAddress;
     setAddress(addr);
     log(`deployed at ${addr}`);
+    const eventId = randId();
+    const mid = randId();
+    setMarketId(Buffer.from(mid).toString('hex'));
+    // same handle is fine here: strictly sequential, no coins involved
+    await (d as any).callTx.createEvent(eventId);
+    log('createEvent ok');
+    await (d as any).callTx.createMarket(mid, eventId, 1n, 13n, true);
+    log(`createMarket ok, marketId=${Buffer.from(mid).toString('hex').slice(0, 8)}`);
   });
 
   const bet = run('place bet', async () => {
     if (!providers) throw new Error('connect first');
+    const mid = Uint8Array.from(Buffer.from(marketId.trim(), 'hex'));
     const contract = await joinMarket(providers, address.trim());
-    await patchPrivateState(providers, { secretKey: rand32(), outcome: 0n, tickets: 3n });
+    await patchPrivateState(providers, {
+      secretKey: rand32(),
+      marketId: mid,
+      outcome: 0n,
+      tickets: 3n,
+    });
     const res: any = await (contract as any).callTx.placeBet(
       { nonce: rand32(), color: NATIVE, value: 300n },
+      mid,
       0n,
       3n,
     );
     log(`bet landed in block ${res.public?.blockHeight}`);
     log(JSON.stringify(await readPools(address.trim())));
+  });
+
+  // E3 in the browser: node failed concurrent txs on the LevelDB single-open lock.
+  // IndexedDB has no such lock, so re-check whether the browser needs a tx queue too.
+  const concurrent = run('two concurrent bets', async () => {
+    if (!providers) throw new Error('connect first');
+    const mid = Uint8Array.from(Buffer.from(marketId.trim(), 'hex'));
+    const contract = await joinMarket(providers, address.trim());
+    await patchPrivateState(providers, { secretKey: rand32(), marketId: mid, outcome: 0n, tickets: 1n });
+    const one = () =>
+      (contract as any).callTx.placeBet({ nonce: rand32(), color: NATIVE, value: 100n }, mid, 0n, 1n);
+    const rs = await Promise.allSettled([one(), one()]);
+    rs.forEach((r, i) =>
+      log(
+        r.status === 'fulfilled'
+          ? `bet ${i}: OK block ${(r.value as any).public?.blockHeight}`
+          : `bet ${i}: FAILED ${(r.reason as Error).message}`,
+      ),
+    );
   });
 
   const B = (p: { on: () => void; children: string; need?: boolean }) => (
@@ -113,6 +153,15 @@ export function App() {
       <div>
         addr <input value={address} onChange={(e) => setAddress(e.target.value)} size={70} />
       </div>
+      <div>
+        mkt <input value={marketId} onChange={(e) => setMarketId(e.target.value)} size={70} />
+      </div>
+      <div>
+        prv <input value={proofServer} onChange={(e) => setProofServer(e.target.value)} size={70} />
+        <button onClick={() => setProofServer('https://proof-server.preview.midnight.network')}>
+          use hosted
+        </button>
+      </div>
       <p>
         <B on={detectLace}>1. detect Lace</B>
         <B on={checkZk}>2. fetch zk artifacts</B>
@@ -121,8 +170,9 @@ export function App() {
       </p>
       <p>
         <B on={connect}>5. connect wallet</B>
-        <B on={deploy} need={!!providers}>6. deploy market</B>
-        <B on={bet} need={!!providers && !!address}>7. place bet</B>
+        <B on={deploy} need={!!providers}>6. deploy + market</B>
+        <B on={bet} need={!!providers && !!address && !!marketId}>7. place bet</B>
+        <B on={concurrent} need={!!providers && !!address && !!marketId}>8. two concurrent bets</B>
       </p>
       <div>wallet: {ctx ? 'ready' : 'none'}</div>
       <pre style={{ background: '#eee', padding: 8, maxHeight: '55vh', overflow: 'auto' }}>

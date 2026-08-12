@@ -94,8 +94,11 @@ export circuit commitmentFor(
   outcome: Uint<8>,
   tickets: Uint<32>
 ): Bytes<32> {
-  return persistentCommit<Vector<3, Field>>(
-    [marketId as Field, outcome as Field, tickets as Field],
+  // Commit over Bytes, never `marketId as Field`: a 32-byte id exceeds the
+  // BLS12-381 scalar modulus about half the time and the cast is a range error
+  // at proving time. `outcome`/`tickets` are small, so their Field cast is safe.
+  return persistentCommit<Vector<3, Bytes<32>>>(
+    [marketId, outcome as Field as Bytes<32>, tickets as Field as Bytes<32>],
     sk
   );
 }

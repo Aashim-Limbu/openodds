@@ -223,7 +223,7 @@ class _LeafPreimage_0 {
 
 const _descriptor_21 = new _LeafPreimage_0();
 
-const _descriptor_22 = new __compactRuntime.CompactTypeVector(3, _descriptor_15);
+const _descriptor_22 = new __compactRuntime.CompactTypeVector(3, _descriptor_0);
 
 const _descriptor_23 = new __compactRuntime.CompactTypeVector(2, _descriptor_0);
 
@@ -250,8 +250,6 @@ const _descriptor_25 = new _CoinPreimage_0();
 
 const _descriptor_26 = new __compactRuntime.CompactTypeVector(2, _descriptor_15);
 
-const _descriptor_27 = new __compactRuntime.CompactTypeVector(3, _descriptor_0);
-
 class _Maybe_0 {
   alignment() {
     return _descriptor_3.alignment().concat(_descriptor_11.alignment());
@@ -267,24 +265,24 @@ class _Maybe_0 {
   }
 }
 
-const _descriptor_28 = new _Maybe_0();
+const _descriptor_27 = new _Maybe_0();
 
 class _ShieldedSendResult_0 {
   alignment() {
-    return _descriptor_28.alignment().concat(_descriptor_11.alignment());
+    return _descriptor_27.alignment().concat(_descriptor_11.alignment());
   }
   fromValue(value_0) {
     return {
-      change: _descriptor_28.fromValue(value_0),
+      change: _descriptor_27.fromValue(value_0),
       sent: _descriptor_11.fromValue(value_0)
     }
   }
   toValue(value_0) {
-    return _descriptor_28.toValue(value_0.change).concat(_descriptor_11.toValue(value_0.sent));
+    return _descriptor_27.toValue(value_0.change).concat(_descriptor_11.toValue(value_0.sent));
   }
 }
 
-const _descriptor_29 = new _ShieldedSendResult_0();
+const _descriptor_28 = new _ShieldedSendResult_0();
 
 class _Either_1 {
   alignment() {
@@ -302,7 +300,7 @@ class _Either_1 {
   }
 }
 
-const _descriptor_30 = new _Either_1();
+const _descriptor_29 = new _Either_1();
 
 export class Contract {
   witnesses;
@@ -364,14 +362,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('createEvent',
                                      'argument 1 (as invoked from Typescript)',
-                                     'openodds.compact line 160 char 1',
+                                     'openodds.compact line 163 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(eventId_0.buffer instanceof ArrayBuffer && eventId_0.BYTES_PER_ELEMENT === 1 && eventId_0.length === 32)) {
           __compactRuntime.typeError('createEvent',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'openodds.compact line 160 char 1',
+                                     'openodds.compact line 163 char 1',
                                      'Bytes<32>',
                                      eventId_0)
         }
@@ -404,42 +402,42 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('createMarket',
                                      'argument 1 (as invoked from Typescript)',
-                                     'openodds.compact line 169 char 1',
+                                     'openodds.compact line 172 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(marketId_0.buffer instanceof ArrayBuffer && marketId_0.BYTES_PER_ELEMENT === 1 && marketId_0.length === 32)) {
           __compactRuntime.typeError('createMarket',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'openodds.compact line 169 char 1',
+                                     'openodds.compact line 172 char 1',
                                      'Bytes<32>',
                                      marketId_0)
         }
         if (!(eventId_0.buffer instanceof ArrayBuffer && eventId_0.BYTES_PER_ELEMENT === 1 && eventId_0.length === 32)) {
           __compactRuntime.typeError('createMarket',
                                      'argument 2 (argument 3 as invoked from Typescript)',
-                                     'openodds.compact line 169 char 1',
+                                     'openodds.compact line 172 char 1',
                                      'Bytes<32>',
                                      eventId_0)
         }
         if (!(typeof(marketType_0) === 'bigint' && marketType_0 >= 0n && marketType_0 <= 255n)) {
           __compactRuntime.typeError('createMarket',
                                      'argument 3 (argument 4 as invoked from Typescript)',
-                                     'openodds.compact line 169 char 1',
+                                     'openodds.compact line 172 char 1',
                                      'Uint<0..256>',
                                      marketType_0)
         }
         if (!(typeof(halfLine_0) === 'bigint' && halfLine_0 >= 0n && halfLine_0 <= 65535n)) {
           __compactRuntime.typeError('createMarket',
                                      'argument 4 (argument 5 as invoked from Typescript)',
-                                     'openodds.compact line 169 char 1',
+                                     'openodds.compact line 172 char 1',
                                      'Uint<0..65536>',
                                      halfLine_0)
         }
         if (!(typeof(favIsHome_0) === 'boolean')) {
           __compactRuntime.typeError('createMarket',
                                      'argument 5 (argument 6 as invoked from Typescript)',
-                                     'openodds.compact line 169 char 1',
+                                     'openodds.compact line 172 char 1',
                                      'Boolean',
                                      favIsHome_0)
         }
@@ -474,28 +472,28 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('postScore',
                                      'argument 1 (as invoked from Typescript)',
-                                     'openodds.compact line 193 char 1',
+                                     'openodds.compact line 196 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(eventId_0.buffer instanceof ArrayBuffer && eventId_0.BYTES_PER_ELEMENT === 1 && eventId_0.length === 32)) {
           __compactRuntime.typeError('postScore',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'openodds.compact line 193 char 1',
+                                     'openodds.compact line 196 char 1',
                                      'Bytes<32>',
                                      eventId_0)
         }
         if (!(typeof(h2_0) === 'bigint' && h2_0 >= 0n && h2_0 <= 65535n)) {
           __compactRuntime.typeError('postScore',
                                      'argument 2 (argument 3 as invoked from Typescript)',
-                                     'openodds.compact line 193 char 1',
+                                     'openodds.compact line 196 char 1',
                                      'Uint<0..65536>',
                                      h2_0)
         }
         if (!(typeof(a2_0) === 'bigint' && a2_0 >= 0n && a2_0 <= 65535n)) {
           __compactRuntime.typeError('postScore',
                                      'argument 3 (argument 4 as invoked from Typescript)',
-                                     'openodds.compact line 193 char 1',
+                                     'openodds.compact line 196 char 1',
                                      'Uint<0..65536>',
                                      a2_0)
         }
@@ -526,14 +524,14 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('voidEvent',
                                      'argument 1 (as invoked from Typescript)',
-                                     'openodds.compact line 210 char 1',
+                                     'openodds.compact line 213 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(eventId_0.buffer instanceof ArrayBuffer && eventId_0.BYTES_PER_ELEMENT === 1 && eventId_0.length === 32)) {
           __compactRuntime.typeError('voidEvent',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'openodds.compact line 210 char 1',
+                                     'openodds.compact line 213 char 1',
                                      'Bytes<32>',
                                      eventId_0)
         }
@@ -563,35 +561,35 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('placeBet',
                                      'argument 1 (as invoked from Typescript)',
-                                     'openodds.compact line 228 char 1',
+                                     'openodds.compact line 231 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
         if (!(typeof(coin_0) === 'object' && coin_0.nonce.buffer instanceof ArrayBuffer && coin_0.nonce.BYTES_PER_ELEMENT === 1 && coin_0.nonce.length === 32 && coin_0.color.buffer instanceof ArrayBuffer && coin_0.color.BYTES_PER_ELEMENT === 1 && coin_0.color.length === 32 && typeof(coin_0.value) === 'bigint' && coin_0.value >= 0n && coin_0.value <= 340282366920938463463374607431768211455n)) {
           __compactRuntime.typeError('placeBet',
                                      'argument 1 (argument 2 as invoked from Typescript)',
-                                     'openodds.compact line 228 char 1',
+                                     'openodds.compact line 231 char 1',
                                      'struct ShieldedCoinInfo<nonce: Bytes<32>, color: Bytes<32>, value: Uint<0..340282366920938463463374607431768211456>>',
                                      coin_0)
         }
         if (!(marketId_0.buffer instanceof ArrayBuffer && marketId_0.BYTES_PER_ELEMENT === 1 && marketId_0.length === 32)) {
           __compactRuntime.typeError('placeBet',
                                      'argument 2 (argument 3 as invoked from Typescript)',
-                                     'openodds.compact line 228 char 1',
+                                     'openodds.compact line 231 char 1',
                                      'Bytes<32>',
                                      marketId_0)
         }
         if (!(typeof(outcome_0) === 'bigint' && outcome_0 >= 0n && outcome_0 <= 255n)) {
           __compactRuntime.typeError('placeBet',
                                      'argument 3 (argument 4 as invoked from Typescript)',
-                                     'openodds.compact line 228 char 1',
+                                     'openodds.compact line 231 char 1',
                                      'Uint<0..256>',
                                      outcome_0)
         }
         if (!(typeof(tickets_0) === 'bigint' && tickets_0 >= 0n && tickets_0 <= 4294967295n)) {
           __compactRuntime.typeError('placeBet',
                                      'argument 4 (argument 5 as invoked from Typescript)',
-                                     'openodds.compact line 228 char 1',
+                                     'openodds.compact line 231 char 1',
                                      'Uint<0..4294967296>',
                                      tickets_0)
         }
@@ -622,7 +620,7 @@ export class Contract {
         if (!(typeof(contextOrig_0) === 'object' && contextOrig_0.currentQueryContext != undefined)) {
           __compactRuntime.typeError('claim',
                                      'argument 1 (as invoked from Typescript)',
-                                     'openodds.compact line 271 char 1',
+                                     'openodds.compact line 274 char 1',
                                      'CircuitContext',
                                      contextOrig_0)
         }
@@ -1180,7 +1178,7 @@ export class Contract {
     return result_0;
   }
   _persistentHash_0(value_0) {
-    const result_0 = __compactRuntime.persistentHash(_descriptor_27, value_0);
+    const result_0 = __compactRuntime.persistentHash(_descriptor_22, value_0);
     return result_0;
   }
   _persistentHash_1(value_0) {
@@ -1366,11 +1364,13 @@ export class Contract {
     return result_0;
   }
   _commitmentFor_0(sk_0, marketId_0, outcome_0, tickets_0) {
-    return this._persistentCommit_0([__compactRuntime.convertBytesToField(32,
-                                                                          marketId_0,
-                                                                          'openodds.compact line 98 char 6'),
-                                     outcome_0,
-                                     tickets_0],
+    return this._persistentCommit_0([marketId_0,
+                                     __compactRuntime.convertFieldToBytes(32,
+                                                                          outcome_0,
+                                                                          'openodds.compact line 101 char 16'),
+                                     __compactRuntime.convertFieldToBytes(32,
+                                                                          tickets_0,
+                                                                          'openodds.compact line 101 char 47')],
                                     sk_0);
   }
   _nullifierFor_0(sk_0, marketId_0) {
@@ -1387,7 +1387,7 @@ export class Contract {
                                    marketId_0,
                                    __compactRuntime.convertFieldToBytes(32,
                                                                         outcome_0,
-                                                                        'openodds.compact line 115 char 43')]);
+                                                                        'openodds.compact line 118 char 43')]);
   }
   _assertOracle_0(context, partialProofData) {
     const kh_0 = this._persistentHash_1([new Uint8Array([111, 112, 101, 110, 111, 100, 100, 115, 58, 111, 114, 97, 99, 108, 101, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]),
@@ -1766,7 +1766,7 @@ export class Contract {
     __compactRuntime.assert(this._equal_7(coin_0.value,
                                           ((t1) => {
                                             if (t1 > 340282366920938463463374607431768211455n) {
-                                              throw new __compactRuntime.CompactError('openodds.compact line 244 char 24: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 340282366920938463463374607431768211455');
+                                              throw new __compactRuntime.CompactError('openodds.compact line 247 char 24: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 340282366920938463463374607431768211455');
                                             }
                                             return t1;
                                           })(tickets_0 * this._ticketPrice_0())),
@@ -1840,7 +1840,7 @@ export class Contract {
                                                                                                      { concat: { cached: true,
                                                                                                                  n: 91 } },
                                                                                                      { ins: { cached: false,
-                                                                                                              n: 1 } }]) : (() => { throw new __compactRuntime.CompactError(`openodds.compact line 247 char 5: Coin commitment not found. Check the coin has been received (or call 'createZswapOutput')`); })();
+                                                                                                              n: 1 } }]) : (() => { throw new __compactRuntime.CompactError(`openodds.compact line 250 char 5: Coin commitment not found. Check the coin has been received (or call 'createZswapOutput')`); })();
     } else {
       const tmp_3 = this._right_0(_descriptor_13.fromValue(__compactRuntime.queryLedgerState(context,
                                                                                              partialProofData,
@@ -1882,7 +1882,7 @@ export class Contract {
                                                                                                       { concat: { cached: true,
                                                                                                                   n: 91 } },
                                                                                                       { ins: { cached: false,
-                                                                                                               n: 1 } }]) : (() => { throw new __compactRuntime.CompactError(`openodds.compact line 252 char 5: Coin commitment not found. Check the coin has been received (or call 'createZswapOutput')`); })();
+                                                                                                               n: 1 } }]) : (() => { throw new __compactRuntime.CompactError(`openodds.compact line 255 char 5: Coin commitment not found. Check the coin has been received (or call 'createZswapOutput')`); })();
       __compactRuntime.queryLedgerState(context,
                                         partialProofData,
                                         [
@@ -1961,7 +1961,7 @@ export class Contract {
                                   outcome_0);
     const tmp_4 = ((t1) => {
                     if (t1 > 18446744073709551615n) {
-                      throw new __compactRuntime.CompactError('openodds.compact line 266 char 38: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
+                      throw new __compactRuntime.CompactError('openodds.compact line 269 char 38: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
                     }
                     return t1;
                   })(prev_0 + tickets_0);
@@ -2133,7 +2133,7 @@ export class Contract {
                               'treasury empty');
       const amount_0 = ((t1) => {
                          if (t1 > 340282366920938463463374607431768211455n) {
-                           throw new __compactRuntime.CompactError('openodds.compact line 305 char 20: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 340282366920938463463374607431768211455');
+                           throw new __compactRuntime.CompactError('openodds.compact line 308 char 20: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 340282366920938463463374607431768211455');
                          }
                          return t1;
                        })(payoutTickets_0 * this._ticketPrice_0());
@@ -2211,7 +2211,7 @@ export class Contract {
                                                                                                        { concat: { cached: true,
                                                                                                                    n: 91 } },
                                                                                                        { ins: { cached: false,
-                                                                                                                n: 1 } }]) : (() => { throw new __compactRuntime.CompactError(`openodds.compact line 313 char 7: Coin commitment not found. Check the coin has been received (or call 'createZswapOutput')`); })();
+                                                                                                                n: 1 } }]) : (() => { throw new __compactRuntime.CompactError(`openodds.compact line 316 char 7: Coin commitment not found. Check the coin has been received (or call 'createZswapOutput')`); })();
       } else {
         __compactRuntime.queryLedgerState(context,
                                           partialProofData,
@@ -2262,7 +2262,7 @@ export class Contract {
                                          1n);
           const totalT_0 = ((t1) => {
                              if (t1 > 18446744073709551615n) {
-                               throw new __compactRuntime.CompactError('openodds.compact line 353 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
+                               throw new __compactRuntime.CompactError('openodds.compact line 356 char 18: cast from Field or Uint value to smaller Uint value failed: ' + t1 + ' is greater than 18446744073709551615');
                              }
                              return t1;
                            })(poolA_0 + poolB_0);
@@ -3001,14 +3001,14 @@ export const pureCircuits = {
     if (!(sk_0.buffer instanceof ArrayBuffer && sk_0.BYTES_PER_ELEMENT === 1 && sk_0.length === 32)) {
       __compactRuntime.typeError('nullifierFor',
                                  'argument 1',
-                                 'openodds.compact line 103 char 1',
+                                 'openodds.compact line 106 char 1',
                                  'Bytes<32>',
                                  sk_0)
     }
     if (!(marketId_0.buffer instanceof ArrayBuffer && marketId_0.BYTES_PER_ELEMENT === 1 && marketId_0.length === 32)) {
       __compactRuntime.typeError('nullifierFor',
                                  'argument 2',
-                                 'openodds.compact line 103 char 1',
+                                 'openodds.compact line 106 char 1',
                                  'Bytes<32>',
                                  marketId_0)
     }
@@ -3022,7 +3022,7 @@ export const pureCircuits = {
     if (!(sk_0.buffer instanceof ArrayBuffer && sk_0.BYTES_PER_ELEMENT === 1 && sk_0.length === 32)) {
       __compactRuntime.typeError('oracleKhOf',
                                  'argument 1',
-                                 'openodds.compact line 109 char 1',
+                                 'openodds.compact line 112 char 1',
                                  'Bytes<32>',
                                  sk_0)
     }
@@ -3037,14 +3037,14 @@ export const pureCircuits = {
     if (!(marketId_0.buffer instanceof ArrayBuffer && marketId_0.BYTES_PER_ELEMENT === 1 && marketId_0.length === 32)) {
       __compactRuntime.typeError('poolKey',
                                  'argument 1',
-                                 'openodds.compact line 113 char 1',
+                                 'openodds.compact line 116 char 1',
                                  'Bytes<32>',
                                  marketId_0)
     }
     if (!(typeof(outcome_0) === 'bigint' && outcome_0 >= 0n && outcome_0 <= 255n)) {
       __compactRuntime.typeError('poolKey',
                                  'argument 2',
-                                 'openodds.compact line 113 char 1',
+                                 'openodds.compact line 116 char 1',
                                  'Uint<0..256>',
                                  outcome_0)
     }

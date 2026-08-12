@@ -27,9 +27,11 @@ const TICKET_PRICE = 100n;
 const coinFor = (tickets: bigint) => ({ nonce: rand32(), color: NATIVE, value: tickets * TICKET_PRICE });
 
 const ORACLE_SK = b(7);
-const EVENT = b(0xe0);
-const MKT_SPREAD = b(0x10);
-const MKT_TOTAL = b(0x11);
+// Random ids on purpose: a 32-byte id above the BLS scalar modulus used to
+// break commitmentFor, and fixed low-byte ids hid it.
+const EVENT = rand32();
+const MKT_SPREAD = rand32();
+const MKT_TOTAL = rand32();
 
 const wall = new Map<string, number>();
 const phase = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {

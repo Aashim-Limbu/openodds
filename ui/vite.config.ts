@@ -11,18 +11,25 @@ const zkDir = path.resolve(__dirname, '..', 'contract', 'src', 'managed', 'openo
 
 // Serve the compiled ZK artifacts at /zk/{keys,zkir}/<circuit>.<ext> so
 // FetchZkConfigProvider('http://localhost:5173/zk') can GET them.
-// ponytail: dev-server only. For a deployed build, copy the dir into public/.
+// ponytail: dev/preview server only. For a static deploy:
+//   cp -r ../contract/src/managed/openodds/{keys,zkir} public/zk/
+const serveZk = (req: any, res: any, next: any) => {
+  const rel = decodeURIComponent((req.url ?? '/').split('?')[0]);
+  if (rel.includes('..')) return next();
+  const file = path.join(zkDir, rel);
+  if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return next();
+  res.setHeader('content-type', 'application/octet-stream');
+  fs.createReadStream(file).pipe(res);
+};
 const zkAssets = () => ({
   name: 'openodds-zk-assets',
-  configureServer(server: { middlewares: { use: Function } }) {
-    server.middlewares.use('/zk', (req: any, res: any, next: any) => {
-      const rel = decodeURIComponent((req.url ?? '/').split('?')[0]);
-      if (rel.includes('..')) return next();
-      const file = path.join(zkDir, rel);
-      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) return next();
-      res.setHeader('content-type', 'application/octet-stream');
-      fs.createReadStream(file).pipe(res);
-    });
+  // NB: must not *return* middlewares.use(...) — connect's app is a function and
+  // vite would mistake it for a post hook and call it with no args.
+  configureServer(s: any) {
+    s.middlewares.use('/zk', serveZk);
+  },
+  configurePreviewServer(s: any) {
+    s.middlewares.use('/zk', serveZk);
   },
 });
 

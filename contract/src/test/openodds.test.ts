@@ -344,6 +344,48 @@ describe("multi-market isolation", () => {
   });
 });
 
+describe("id encoding", () => {
+  // Regression: commitmentFor used to cast marketId to Field. Any id above the
+  // BLS12-381 scalar modulus (roughly half of all random 32-byte ids) then blew
+  // up at proving time with a range error. Low-byte ids like 0x10.. hid it.
+  it("accepts high-byte market and event ids end to end", () => {
+    const hiEvent = bytes(0xff);
+    const hiMarket = new Uint8Array(32).fill(0xff);
+    hiMarket[31] = 0xfe; // distinct from the event id
+
+    const sim = new OpenOddsSimulator(oracle(), ORACLE_KH);
+    sim.createEvent(hiEvent);
+    sim.createMarket({
+      marketId: hiMarket,
+      eventId: hiEvent,
+      marketType: 1n,
+      halfLine: 13n,
+      favIsHome: true,
+    });
+
+    sim.switchUser(alice());
+    sim.placeBet(hiMarket, 0n, 3n);
+    const alicePS = sim.circuitContext.currentPrivateState;
+    sim.switchUser(bob());
+    sim.placeBet(hiMarket, 1n, 7n);
+
+    expect(sim.pool(hiMarket, 0n)).toBe(3n);
+    sim.switchUser(oracle());
+    sim.postScore(hiEvent, 48n, 34n);
+    sim.switchUser(alicePS);
+    expect(sim.claim()).toBe(10n);
+  });
+
+  it("commits distinctly for ids differing only in the high byte", () => {
+    const a = new Uint8Array(32).fill(0xff);
+    const b2 = new Uint8Array(32).fill(0xff);
+    b2[0] = 0x7f;
+    expect(pureCircuits.commitmentFor(bytes(1), a, 0n, 3n)).not.toEqual(
+      pureCircuits.commitmentFor(bytes(1), b2, 0n, 3n),
+    );
+  });
+});
+
 describe("void and refunds", () => {
   it("refunds every position when the event is voided", () => {
     const sim = marketWith(1n, 13n);
