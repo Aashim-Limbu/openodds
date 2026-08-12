@@ -1,8 +1,8 @@
 // OpenOdds witnesses: the private inputs the local machine supplies to circuits.
 // Nothing here ever leaves the user's machine except what circuits disclose().
 
-import { Ledger } from "./managed/openodds/contract/index.js";
-import { WitnessContext } from "@midnight-ntwrk/midnight-js-protocol/compact-runtime";
+import type { Ledger } from "./managed/openodds/contract/index.js";
+import type { WitnessContext } from "@midnight-ntwrk/midnight-js-protocol/compact-runtime";
 
 export type QualifiedCoin = {
   nonce: Uint8Array;
@@ -21,8 +21,6 @@ export type OpenOddsPrivateState = {
   readonly quotient: bigint;
   /** only set for the oracle's wallet */
   readonly oracleSecretKey: Uint8Array;
-  /** treasury coin to pay my claim from, discovered off-chain via indexer */
-  readonly treasuryCoin: QualifiedCoin;
   /** my fresh shielded payout address */
   readonly payoutRecipient: Uint8Array;
 };
@@ -36,12 +34,6 @@ export const createPrivateState = (
   tickets: 0n,
   quotient: 0n,
   oracleSecretKey,
-  treasuryCoin: {
-    nonce: new Uint8Array(32),
-    color: new Uint8Array(32),
-    value: 0n,
-    mt_index: 0n,
-  },
   payoutRecipient: new Uint8Array(32),
 });
 
@@ -73,10 +65,6 @@ export const witnesses = {
   payoutQuotient: ({ privateState }: WC): [OpenOddsPrivateState, bigint] => [
     privateState,
     privateState.quotient,
-  ],
-  treasuryCoin: ({ privateState }: WC): [OpenOddsPrivateState, QualifiedCoin] => [
-    privateState,
-    privateState.treasuryCoin,
   ],
   payoutRecipient: (
     { privateState }: WC,

@@ -42,6 +42,12 @@ export ledger awayScore2: Uint<16>;
 export ledger commitments: HistoricMerkleTree<10, Bytes<32>>;
 export ledger nullifiers: Set<Bytes<32>>;
 
+// ---------- treasury ----------
+// Single merged escrow coin (battleship/coracle pattern). Merge-on-bet so any
+// claim can be paid from one coin; runtime fills mt_index via writeCoin.
+export ledger treasury: QualifiedShieldedCoinInfo;
+export ledger treasuryFunded: Boolean;
+
 constructor(
   initOracleKeyHash: Bytes<32>,
   initMarketType: Uint<8>,
@@ -64,8 +70,6 @@ export circuit ticketPrice(): Uint<128> {
 
 // ---------- witnesses (private inputs, provided by local TS) ----------
 witness betSecret(): Bytes<32>;
-// treasury coin to pay a claim from, discovered off-chain from the indexer
-witness treasuryCoin(): QualifiedShieldedCoinInfo;
 // claimant's shielded address: a fresh Zswap output, unlinkable to the bet
 witness payoutRecipient(): ZswapCoinPublicKey;
 witness betOutcome(): Uint<8>;
@@ -127,6 +131,18 @@ export circuit placeBet(coin: ShieldedCoinInfo, outcome: Uint<8>, tickets: Uint<
   assert(coin.color == nativeToken(), "wrong token");
   assert(coin.value == (tickets * ticketPrice()) as Uint<128>, "stake != tickets * price");
   receiveShielded(disclose(coin));
+  if (treasuryFunded) {
+    treasury.writeCoin(
+      mergeCoinImmediate(treasury, disclose(coin)),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+    );
+  } else {
+    treasury.writeCoin(
+      disclose(coin),
+      right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+    );
+    treasuryFunded = true;
+  }
   // Anonymous position: only the commitment goes in the tree.
   const c = commitmentFor(betSecret(), outcome, tickets);
   commitments.insert(disclose(c));
@@ -193,17 +209,24 @@ export circuit claim(): Uint<64> {
   const payoutTickets = disclose(claimableTickets(outcome, tickets));
 
   if (payoutTickets > 0) {
-    // Money out: spend a treasury coin (discovered off-chain), pay a FRESH
-    // shielded output — recipient identity never appears on the ledger.
-    const tc = treasuryCoin();
-    assert(tc.color == nativeToken(), "bad treasury coin");
+    // Money out: spend the merged treasury coin, pay a FRESH shielded
+    // output — recipient identity never appears on the ledger.
+    assert(treasuryFunded, "treasury empty");
     const amount = (payoutTickets * ticketPrice()) as Uint<128>;
-    assert(disclose(tc.value) >= amount, "treasury coin too small");
-    sendShielded(
-      disclose(tc),
+    assert(treasury.value >= amount, "treasury too small");
+    const sendRes = sendShielded(
+      treasury,
       left<ZswapCoinPublicKey, ContractAddress>(disclose(payoutRecipient())),
       amount
     );
+    if (sendRes.change.is_some) {
+      treasury.writeCoin(
+        sendRes.change.value,
+        right<ZswapCoinPublicKey, ContractAddress>(kernel.self())
+      );
+    } else {
+      treasuryFunded = false;
+    }
   }
   return payoutTickets;
 }

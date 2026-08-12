@@ -4,11 +4,6 @@ export enum MarketStatus { OPEN = 0, RESOLVED = 1, VOID = 2 }
 
 export type Witnesses<PS> = {
   betSecret(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, Uint8Array];
-  treasuryCoin(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, { nonce: Uint8Array,
-                                                                             color: Uint8Array,
-                                                                             value: bigint,
-                                                                             mt_index: bigint
-                                                                           }];
   payoutRecipient(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, { bytes: Uint8Array
                                                                               }];
   betOutcome(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, bigint];
@@ -98,6 +93,12 @@ export type Ledger = {
     member(elem_0: Uint8Array): boolean;
     [Symbol.iterator](): Iterator<Uint8Array>
   };
+  readonly treasury: { nonce: Uint8Array,
+                       color: Uint8Array,
+                       value: bigint,
+                       mt_index: bigint
+                     };
+  readonly treasuryFunded: boolean;
 }
 
 export type ContractReferenceLocations = any;

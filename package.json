@@ -1,0 +1,13 @@
+{
+  "name": "openodds",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "contract",
+    "cli"
+  ],
+  "overrides": {
+    "smoldot": "npm:@aspect-build/empty@0.0.0",
+    "@midnight-ntwrk/onchain-runtime-v3": "3.1.0"
+  }
+}

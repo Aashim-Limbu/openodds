@@ -110,12 +110,6 @@ export class OpenOddsSimulator {
     const nonce = new Uint8Array(32);
     crypto.getRandomValues(nonce);
     this.patchUser({
-      treasuryCoin: {
-        nonce,
-        color: new Uint8Array(32),
-        value: 1_000_000n,
-        mt_index: 0n,
-      },
       payoutRecipient: new Uint8Array(32).fill(0x77),
     });
     const r = this.contract.impureCircuits.claim(this.circuitContext);
