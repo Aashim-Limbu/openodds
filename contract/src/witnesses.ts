@@ -4,25 +4,21 @@
 import type { Ledger } from "./managed/openodds/contract/index.js";
 import type { WitnessContext } from "@midnight-ntwrk/midnight-js-protocol/compact-runtime";
 
-export type QualifiedCoin = {
-  nonce: Uint8Array;
-  color: Uint8Array;
-  value: bigint;
-  mt_index: bigint;
-};
-
 export type OpenOddsPrivateState = {
+  /** the secret behind every position this wallet holds */
   readonly secretKey: Uint8Array;
-  /** side of my bet (0|1) */
+  /** which market the pending bet/claim refers to */
+  readonly marketId: Uint8Array;
+  /** side of the bet (0|1) */
   readonly outcome: bigint;
-  /** size of my bet in tickets */
+  /** size of the bet in tickets */
   readonly tickets: bigint;
-  /** claimed payout quotient q, with q*W <= k*T < (q+1)*W (computed locally) */
+  /** payout quotient q with q*W <= k*T < (q+1)*W, computed locally */
   readonly quotient: bigint;
-  /** only set for the oracle's wallet */
-  readonly oracleSecretKey: Uint8Array;
-  /** my fresh shielded payout address */
+  /** fresh shielded address to receive a payout */
   readonly payoutRecipient: Uint8Array;
+  /** only set on the oracle's wallet */
+  readonly oracleSecretKey: Uint8Array;
 };
 
 export const createPrivateState = (
@@ -30,12 +26,17 @@ export const createPrivateState = (
   oracleSecretKey: Uint8Array = new Uint8Array(32),
 ): OpenOddsPrivateState => ({
   secretKey,
+  marketId: new Uint8Array(32),
   outcome: 0n,
   tickets: 0n,
   quotient: 0n,
-  oracleSecretKey,
   payoutRecipient: new Uint8Array(32),
+  oracleSecretKey,
 });
+
+/** floor(k*T/W) — the quotient the claim circuit verifies. */
+export const payoutQuotientOf = (tickets: bigint, total: bigint, winning: bigint): bigint =>
+  winning === 0n ? 0n : (tickets * total) / winning;
 
 type WC = WitnessContext<Ledger, OpenOddsPrivateState>;
 
@@ -43,6 +44,10 @@ export const witnesses = {
   betSecret: ({ privateState }: WC): [OpenOddsPrivateState, Uint8Array] => [
     privateState,
     privateState.secretKey,
+  ],
+  betMarketId: ({ privateState }: WC): [OpenOddsPrivateState, Uint8Array] => [
+    privateState,
+    privateState.marketId,
   ],
   betOutcome: ({ privateState }: WC): [OpenOddsPrivateState, bigint] => [
     privateState,

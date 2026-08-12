@@ -27,6 +27,13 @@
           }
         },
         {
+          "name": "marketId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
           "name": "outcome",
           "type": {
             "type-name": "Uint",
@@ -57,6 +64,13 @@
             "type-name": "Bytes",
             "length": 32
           }
+        },
+        {
+          "name": "marketId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
         }
       ],
       "result-type": {
@@ -80,6 +94,148 @@
       "result-type": {
         "type-name": "Bytes",
         "length": 32
+      }
+    },
+    {
+      "name": "poolKey",
+      "pure": true,
+      "proof": false,
+      "arguments": [
+        {
+          "name": "marketId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "outcome",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 255
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "createEvent",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "eventId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "createMarket",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "marketId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "eventId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "marketType",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 255
+          }
+        },
+        {
+          "name": "halfLine",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 65535
+          }
+        },
+        {
+          "name": "favIsHome",
+          "type": {
+            "type-name": "Boolean"
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "postScore",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "eventId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
+          "name": "h2",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 65535
+          }
+        },
+        {
+          "name": "a2",
+          "type": {
+            "type-name": "Uint",
+            "maxval": 65535
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
+      }
+    },
+    {
+      "name": "voidEvent",
+      "pure": false,
+      "proof": true,
+      "arguments": [
+        {
+          "name": "eventId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        }
+      ],
+      "result-type": {
+        "type-name": "Tuple",
+        "types": [
+        ]
       }
     },
     {
@@ -118,6 +274,13 @@
           }
         },
         {
+          "name": "marketId",
+          "type": {
+            "type-name": "Bytes",
+            "length": 32
+          }
+        },
+        {
           "name": "outcome",
           "type": {
             "type-name": "Uint",
@@ -131,44 +294,6 @@
             "maxval": 4294967295
           }
         }
-      ],
-      "result-type": {
-        "type-name": "Tuple",
-        "types": [
-        ]
-      }
-    },
-    {
-      "name": "postScore",
-      "pure": false,
-      "proof": true,
-      "arguments": [
-        {
-          "name": "h2",
-          "type": {
-            "type-name": "Uint",
-            "maxval": 65535
-          }
-        },
-        {
-          "name": "a2",
-          "type": {
-            "type-name": "Uint",
-            "maxval": 65535
-          }
-        }
-      ],
-      "result-type": {
-        "type-name": "Tuple",
-        "types": [
-        ]
-      }
-    },
-    {
-      "name": "voidMarket",
-      "pure": false,
-      "proof": true,
-      "arguments": [
       ],
       "result-type": {
         "type-name": "Tuple",
@@ -199,21 +324,12 @@
       }
     },
     {
-      "name": "payoutRecipient",
+      "name": "betMarketId",
       "arguments": [
       ],
       "result type": {
-        "type-name": "Struct",
-        "name": "ZswapCoinPublicKey",
-        "elements": [
-          {
-            "name": "bytes",
-            "type": {
-              "type-name": "Bytes",
-              "length": 32
-            }
-          }
-        ]
+        "type-name": "Bytes",
+        "length": 32
       }
     },
     {
@@ -260,7 +376,7 @@
             "name": "path",
             "type": {
               "type-name": "Vector",
-              "length": 10,
+              "length": 12,
               "type": {
                 "type-name": "Struct",
                 "name": "MerkleTreePathEntry",
@@ -303,6 +419,24 @@
       }
     },
     {
+      "name": "payoutRecipient",
+      "arguments": [
+      ],
+      "result type": {
+        "type-name": "Struct",
+        "name": "ZswapCoinPublicKey",
+        "elements": [
+          {
+            "name": "bytes",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "oracleSecretKey",
       "arguments": [
       ],
@@ -326,95 +460,122 @@
       }
     },
     {
-      "name": "marketType",
+      "name": "markets",
       "index": 1,
       "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Uint",
-        "maxval": 255
-      }
-    },
-    {
-      "name": "halfLine",
-      "index": 2,
-      "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Uint",
-        "maxval": 65535
-      }
-    },
-    {
-      "name": "favIsHome",
-      "index": 3,
-      "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Boolean"
-      }
-    },
-    {
-      "name": "poolA",
-      "index": 4,
-      "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Uint",
-        "maxval": 18446744073709551615
-      }
-    },
-    {
-      "name": "poolB",
-      "index": 5,
-      "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Uint",
-        "maxval": 18446744073709551615
-      }
-    },
-    {
-      "name": "status",
-      "index": 6,
-      "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Enum",
-        "name": "MarketStatus",
+      "storage": "Map",
+      "key": {
+        "type-name": "Bytes",
+        "length": 32
+      },
+      "value": {
+        "type-name": "Struct",
+        "name": "MarketParams",
         "elements": [
-          "OPEN",
-          "RESOLVED",
-          "VOID"
+          {
+            "name": "eventId",
+            "type": {
+              "type-name": "Bytes",
+              "length": 32
+            }
+          },
+          {
+            "name": "marketType",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 255
+            }
+          },
+          {
+            "name": "halfLine",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          },
+          {
+            "name": "favIsHome",
+            "type": {
+              "type-name": "Boolean"
+            }
+          },
+          {
+            "name": "exists",
+            "type": {
+              "type-name": "Boolean"
+            }
+          }
         ]
       }
     },
     {
-      "name": "homeScore2",
-      "index": 7,
+      "name": "events",
+      "index": 2,
       "exported": true,
-      "storage": "Cell",
-      "type": {
-        "type-name": "Uint",
-        "maxval": 65535
+      "storage": "Map",
+      "key": {
+        "type-name": "Bytes",
+        "length": 32
+      },
+      "value": {
+        "type-name": "Struct",
+        "name": "EventFact",
+        "elements": [
+          {
+            "name": "homeScore2",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          },
+          {
+            "name": "awayScore2",
+            "type": {
+              "type-name": "Uint",
+              "maxval": 65535
+            }
+          },
+          {
+            "name": "status",
+            "type": {
+              "type-name": "Enum",
+              "name": "EventStatus",
+              "elements": [
+                "PENDING",
+                "FINAL",
+                "VOID"
+              ]
+            }
+          },
+          {
+            "name": "exists",
+            "type": {
+              "type-name": "Boolean"
+            }
+          }
+        ]
       }
     },
     {
-      "name": "awayScore2",
-      "index": 8,
+      "name": "pools",
+      "index": 3,
       "exported": true,
-      "storage": "Cell",
-      "type": {
+      "storage": "Map",
+      "key": {
+        "type-name": "Bytes",
+        "length": 32
+      },
+      "value": {
         "type-name": "Uint",
-        "maxval": 65535
+        "maxval": 18446744073709551615
       }
     },
     {
       "name": "commitments",
-      "index": 9,
+      "index": 4,
       "exported": true,
       "storage": "HistoricMerkleTree",
-      "depth": 10,
+      "depth": 12,
       "type": {
         "type-name": "Bytes",
         "length": 32
@@ -422,7 +583,7 @@
     },
     {
       "name": "nullifiers",
-      "index": 10,
+      "index": 5,
       "exported": true,
       "storage": "Set",
       "type": {
@@ -432,7 +593,7 @@
     },
     {
       "name": "treasury",
-      "index": 11,
+      "index": 6,
       "exported": true,
       "storage": "Cell",
       "type": {
@@ -472,7 +633,7 @@
     },
     {
       "name": "treasuryFunded",
-      "index": 12,
+      "index": 7,
       "exported": true,
       "storage": "Cell",
       "type": {

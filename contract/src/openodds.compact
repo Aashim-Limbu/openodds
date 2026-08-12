@@ -1,133 +1,245 @@
-// OpenOdds — E2 spike: claim circuit de-risk.
-// Single market, no Zswap yet (that's spike E1). Goal: prove the four risky pieces
-// compile and verify on toolchain 0.31.1 / language 0.23:
-//   1. commitment + nullifier + HistoricMerkleTree membership (anonymous claim)
-//   2. witness-quotient division  q*W <= k*T < (q+1)*W  (no division in Compact)
-//   3. WIN / PUSH / REFUND branching derived in-circuit from one posted score fact
-//   4. half-point line math with no subtraction (runtime underflow) and no signed ints
+// OpenOdds — private parimutuel betting on Midnight.
+//
+// Public: odds (pool sizes), lines, oracle facts, payouts.
+// Private: WHO bet. Stakes arrive as shielded coins (no payer field); positions
+// are commitments in an anonymity set; claims prove membership and burn a
+// nullifier, paying a fresh shielded output.
+//
+// Resolution: the oracle posts ONE fact per event — (homeScore2, awayScore2) in
+// half-points. Every market on that event (moneyline, any spread, any total)
+// derives its own outcome from that single fact, in-circuit, at claim time.
+// One oracle transaction settles a whole game's slate.
+//
 // SPDX-License-Identifier: Apache-2.0
 
 pragma language_version 0.23;
 
 import CompactStandardLibrary;
 
-// ---------- market status ----------
-export enum MarketStatus {
-  OPEN,
-  RESOLVED,
+// ---------- market types ----------
+// 0 = moneyline  (outcome 0 = home, 1 = away; equal scores => PUSH)
+// 1 = spread     (outcome 0 = favorite covers, 1 = underdog covers)
+// 2 = total      (outcome 0 = over, 1 = under)
+
+// ---------- event status ----------
+export enum EventStatus {
+  PENDING,
+  FINAL,
   VOID
 }
 
-// ---------- market types ----------
-// 0 = moneyline (outcome 0 = home, 1 = away; equal scores => PUSH in spike)
-// 1 = spread    (outcome 0 = favorite covers, 1 = underdog covers)
-// 2 = total     (outcome 0 = over, 1 = under)
+export struct MarketParams {
+  eventId: Bytes<32>,
+  marketType: Uint<8>,
+  // line in half-points: -6.5 => 13, O/U 41.5 => 83.
+  // Odd values can never push; even values push on an exact landing.
+  halfLine: Uint<16>,
+  favIsHome: Boolean,
+  exists: Boolean
+}
 
-// ---------- sealed config ----------
+export struct EventFact {
+  homeScore2: Uint<16>,
+  awayScore2: Uint<16>,
+  status: EventStatus,
+  exists: Boolean
+}
+
+// ---------- config ----------
 export sealed ledger oracleKeyHash: Bytes<32>;
-export sealed ledger marketType: Uint<8>;
-export sealed ledger halfLine: Uint<16>; // line in half-points (e.g. -6.5 => 13)
-export sealed ledger favIsHome: Boolean; // spread only: which side lays the line
 
-// ---------- public pools (odds are public by design) ----------
-export ledger poolA: Uint<64>; // tickets on outcome 0
-export ledger poolB: Uint<64>; // tickets on outcome 1
-
-// ---------- resolution fact ----------
-export ledger status: MarketStatus;
-export ledger homeScore2: Uint<16>; // final score in half-points (score * 2)
-export ledger awayScore2: Uint<16>;
+// ---------- markets and events ----------
+export ledger markets: Map<Bytes<32>, MarketParams>;
+export ledger events: Map<Bytes<32>, EventFact>;
+// poolKey(marketId, outcome) -> ticket count. Composite key keeps this a single
+// flat Map: no nested-map default initialisation, one lookup per access.
+export ledger pools: Map<Bytes<32>, Uint<64>>;
 
 // ---------- privacy machinery ----------
-export ledger commitments: HistoricMerkleTree<10, Bytes<32>>;
+// One anonymity set across every market: a bet in a quiet market still hides
+// in the crowd of the busy one.
+export ledger commitments: HistoricMerkleTree<12, Bytes<32>>;
 export ledger nullifiers: Set<Bytes<32>>;
 
 // ---------- treasury ----------
-// Single merged escrow coin (battleship/coracle pattern). Merge-on-bet so any
-// claim can be paid from one coin; runtime fills mt_index via writeCoin.
+// Single merged escrow coin across all markets (money is fungible). Merge on
+// every bet so any claim can be paid from one coin.
 export ledger treasury: QualifiedShieldedCoinInfo;
 export ledger treasuryFunded: Boolean;
 
-constructor(
-  initOracleKeyHash: Bytes<32>,
-  initMarketType: Uint<8>,
-  initHalfLine: Uint<16>,
-  initFavIsHome: Boolean
-) {
-  // Market parameters are public config.
+constructor(initOracleKeyHash: Bytes<32>) {
   oracleKeyHash = disclose(initOracleKeyHash);
-  marketType = disclose(initMarketType);
-  halfLine = disclose(initHalfLine);
-  favIsHome = disclose(initFavIsHome);
-  status = MarketStatus.OPEN;
 }
 
 // ---------- constants ----------
-// ponytail: fixed ticket price; per-market pricing when multi-market lands
+// ponytail: one global ticket price; per-market pricing when a market needs it
 export circuit ticketPrice(): Uint<128> {
   return 100;
 }
 
-// ---------- witnesses (private inputs, provided by local TS) ----------
+// ---------- witnesses (private, supplied by the local machine) ----------
 witness betSecret(): Bytes<32>;
-// claimant's shielded address: a fresh Zswap output, unlinkable to the bet
-witness payoutRecipient(): ZswapCoinPublicKey;
+witness betMarketId(): Bytes<32>;
 witness betOutcome(): Uint<8>;
 witness betTickets(): Uint<32>;
-witness betPath(commitment: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
+witness betPath(commitment: Bytes<32>): MerkleTreePath<12, Bytes<32>>;
 witness payoutQuotient(): Uint<64>;
+witness payoutRecipient(): ZswapCoinPublicKey;
 witness oracleSecretKey(): Bytes<32>;
 
-// ---------- helpers (exported => callable from TS as pureCircuits) ----------
-export circuit commitmentFor(sk: Bytes<32>, outcome: Uint<8>, tickets: Uint<32>): Bytes<32> {
-  return persistentCommit<Vector<2, Field>>(
-    [outcome as Field, tickets as Field],
+// ---------- pure helpers (exported => usable from TS) ----------
+export circuit commitmentFor(
+  sk: Bytes<32>,
+  marketId: Bytes<32>,
+  outcome: Uint<8>,
+  tickets: Uint<32>
+): Bytes<32> {
+  return persistentCommit<Vector<3, Field>>(
+    [marketId as Field, outcome as Field, tickets as Field],
     sk
   );
 }
 
-export circuit nullifierFor(sk: Bytes<32>): Bytes<32> {
-  return persistentHash<Vector<2, Bytes<32>>>([pad(32, "openodds:nul:"), sk]);
+export circuit nullifierFor(sk: Bytes<32>, marketId: Bytes<32>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>(
+    [pad(32, "openodds:nul:"), marketId, sk]
+  );
 }
 
 export circuit oracleKhOf(sk: Bytes<32>): Bytes<32> {
   return persistentHash<Vector<2, Bytes<32>>>([pad(32, "openodds:oracle:"), sk]);
 }
 
-// Resolution as a pure function of the posted fact. Returns 0 = outcome0 won,
-// 1 = outcome1 won, 2 = push. All comparisons, no subtraction.
-circuit resolveOutcome(): Uint<8> {
-  // moneyline
-  if (marketType == 0) {
-    if (homeScore2 > awayScore2) { return 0; }
-    if (awayScore2 > homeScore2) { return 1; }
-    return 2; // draw => push (spike simplification; 3-way market handles draws)
+export circuit poolKey(marketId: Bytes<32>, outcome: Uint<8>): Bytes<32> {
+  return persistentHash<Vector<3, Bytes<32>>>(
+    [pad(32, "openodds:pool:"), marketId, outcome as Field as Bytes<32>]
+  );
+}
+
+// ---------- internal helpers ----------
+circuit assertOracle(): [] {
+  const kh = persistentHash<Vector<2, Bytes<32>>>(
+    [pad(32, "openodds:oracle:"), oracleSecretKey()]
+  );
+  assert(kh == oracleKeyHash, "not the oracle");
+}
+
+circuit poolOf(marketId: Bytes<32>, outcome: Uint<8>): Uint<64> {
+  // disclose: pool sizes ARE the odds — public by design. Reading one reveals
+  // which market/side is being touched, never who is touching it.
+  const k = disclose(poolKey(marketId, outcome));
+  if (!pools.member(k)) { return 0; }
+  return pools.lookup(k);
+}
+
+// Outcome of a market as a pure function of its event's posted fact.
+// Returns 0 = outcome0 won, 1 = outcome1 won, 2 = push.
+// Comparisons only — no subtraction, so no Uint underflow.
+circuit outcomeOf(m: MarketParams, f: EventFact): Uint<8> {
+  if (m.marketType == 0) {
+    if (f.homeScore2 > f.awayScore2) { return 0; }
+    if (f.awayScore2 > f.homeScore2) { return 1; }
+    return 2; // draw: moneyline pushes (3-way markets model the draw as its own market)
   }
-  // spread: favorite covers iff favScore2 > dogScore2 + halfLine
-  if (marketType == 1) {
-    const favScore2 = favIsHome ? homeScore2 : awayScore2;
-    const dogScore2 = favIsHome ? awayScore2 : homeScore2;
-    const dogPlusLine = dogScore2 + halfLine;
+  if (m.marketType == 1) {
+    const favScore2 = m.favIsHome ? f.homeScore2 : f.awayScore2;
+    const dogScore2 = m.favIsHome ? f.awayScore2 : f.homeScore2;
+    const dogPlusLine = dogScore2 + m.halfLine;
     if (favScore2 > dogPlusLine) { return 0; }
     if (dogPlusLine > favScore2) { return 1; }
-    return 2; // exact landing: only reachable on even half-lines
+    return 2; // exact landing — only reachable on an even half-line
   }
-  // total: over iff home2 + away2 > halfLine
-  const sum2 = homeScore2 + awayScore2;
-  if (sum2 > halfLine) { return 0; }
-  if (halfLine > sum2) { return 1; }
+  const sum2 = f.homeScore2 + f.awayScore2;
+  if (sum2 > m.halfLine) { return 0; }
+  if (m.halfLine > sum2) { return 1; }
   return 2;
 }
 
-// ---------- circuits ----------
+// ---------- oracle / creator circuits ----------
 
-export circuit placeBet(coin: ShieldedCoinInfo, outcome: Uint<8>, tickets: Uint<32>): [] {
-  assert(status == MarketStatus.OPEN, "market closed");
+export circuit createEvent(eventId: Bytes<32>): [] {
+  assertOracle();
+  assert(!events.member(disclose(eventId)), "event exists");
+  events.insert(
+    disclose(eventId),
+    EventFact { homeScore2: 0, awayScore2: 0, status: EventStatus.PENDING, exists: true }
+  );
+}
+
+export circuit createMarket(
+  marketId: Bytes<32>,
+  eventId: Bytes<32>,
+  marketType: Uint<8>,
+  halfLine: Uint<16>,
+  favIsHome: Boolean
+): [] {
+  assertOracle();
+  assert(!markets.member(disclose(marketId)), "market exists");
+  assert(events.member(disclose(eventId)), "no such event");
+  assert(marketType <= 2, "bad market type");
+  markets.insert(
+    disclose(marketId),
+    MarketParams {
+      eventId: disclose(eventId),
+      marketType: disclose(marketType),
+      halfLine: disclose(halfLine),
+      favIsHome: disclose(favIsHome),
+      exists: true
+    }
+  );
+}
+
+// One fact settles every market on the event.
+export circuit postScore(eventId: Bytes<32>, h2: Uint<16>, a2: Uint<16>): [] {
+  assertOracle();
+  assert(events.member(disclose(eventId)), "no such event");
+  const f = events.lookup(disclose(eventId));
+  assert(f.status == EventStatus.PENDING, "already resolved");
+  events.insert(
+    disclose(eventId),
+    EventFact {
+      homeScore2: disclose(h2),
+      awayScore2: disclose(a2),
+      status: EventStatus.FINAL,
+      exists: true
+    }
+  );
+}
+
+// Postponed/abandoned: every market on the event refunds.
+export circuit voidEvent(eventId: Bytes<32>): [] {
+  assertOracle();
+  assert(events.member(disclose(eventId)), "no such event");
+  const f = events.lookup(disclose(eventId));
+  assert(f.status == EventStatus.PENDING, "already resolved");
+  events.insert(
+    disclose(eventId),
+    EventFact {
+      homeScore2: f.homeScore2,
+      awayScore2: f.awayScore2,
+      status: EventStatus.VOID,
+      exists: true
+    }
+  );
+}
+
+// ---------- bettor circuits ----------
+
+export circuit placeBet(
+  coin: ShieldedCoinInfo,
+  marketId: Bytes<32>,
+  outcome: Uint<8>,
+  tickets: Uint<32>
+): [] {
+  assert(markets.member(disclose(marketId)), "no such market");
+  const m = markets.lookup(disclose(marketId));
+  const f = events.lookup(m.eventId);
+  assert(f.status == EventStatus.PENDING, "event already resolved");
   assert(outcome <= 1, "bad outcome");
   assert(tickets >= 1, "zero tickets");
-  // Escrow the stake: shielded coin has no payer field — WHO is betting is
-  // never on the ledger. Stateless treasury (OZ pattern): just receive;
-  // claims spend treasury coins discovered off-chain.
+
+  // Escrow the stake. A shielded coin carries no payer, so nothing on the
+  // ledger says who funded this.
   assert(coin.color == nativeToken(), "wrong token");
   assert(coin.value == (tickets * ticketPrice()) as Uint<128>, "stake != tickets * price");
   receiveShielded(disclose(coin));
@@ -143,74 +255,52 @@ export circuit placeBet(coin: ShieldedCoinInfo, outcome: Uint<8>, tickets: Uint<
     );
     treasuryFunded = true;
   }
-  // Anonymous position: only the commitment goes in the tree.
-  const c = commitmentFor(betSecret(), outcome, tickets);
+
+  // The position: a commitment bound to this market. Identity never appears.
+  const c = commitmentFor(betSecret(), marketId, outcome, tickets);
   commitments.insert(disclose(c));
-  // Public pool delta: odds are public by design (this is the product, not a leak).
-  // disclose(): side and size are public; WHO is betting never appears anywhere.
-  if (disclose(outcome == 0)) {
-    poolA = (poolA + disclose(tickets)) as Uint<64>;
-  } else {
-    poolB = (poolB + disclose(tickets)) as Uint<64>;
-  }
+
+  // Odds move in public. Side and size are the product; who is not.
+  const k = poolKey(marketId, outcome);
+  const prev = poolOf(marketId, outcome);
+  pools.insert(disclose(k), disclose((prev + tickets) as Uint<64>));
 }
 
-export circuit postScore(h2: Uint<16>, a2: Uint<16>): [] {
-  assert(status == MarketStatus.OPEN, "already resolved");
-  const kh = persistentHash<Vector<2, Bytes<32>>>(
-    [pad(32, "openodds:oracle:"), oracleSecretKey()]
-  );
-  assert(kh == oracleKeyHash, "not the oracle");
-  homeScore2 = disclose(h2);
-  awayScore2 = disclose(a2);
-  status = MarketStatus.RESOLVED;
-}
-
-export circuit voidMarket(): [] {
-  assert(status == MarketStatus.OPEN, "already resolved");
-  const kh = persistentHash<Vector<2, Bytes<32>>>(
-    [pad(32, "openodds:oracle:"), oracleSecretKey()]
-  );
-  assert(kh == oracleKeyHash, "not the oracle");
-  status = MarketStatus.VOID;
-}
-
-// Returns payout in ticket units (money wiring is spike E1's job).
-// WIN: pro-rata share of the whole pot: q where q*W <= k*T < (q+1)*W.
-// PUSH / VOID: stake back (k).
+// Payout in ticket units. WIN: pro-rata share of the whole pot.
+// PUSH / VOID: stake back. LOSS: nothing (nullifier still burns).
 export circuit claim(): Uint<64> {
-  assert(status != MarketStatus.OPEN, "market not resolved");
-
   const sk = betSecret();
+  const marketId = betMarketId();
   const outcome = betOutcome();
   const tickets = betTickets();
   assert(outcome <= 1, "bad witness outcome");
   assert(tickets >= 1, "bad witness tickets");
+  assert(markets.member(disclose(marketId)), "no such market");
 
-  // membership: my commitment is in the tree
-  const c = commitmentFor(sk, outcome, tickets);
+  const m = markets.lookup(disclose(marketId));
+  const f = events.lookup(m.eventId);
+  assert(f.status != EventStatus.PENDING, "event not resolved");
+
+  // Membership: this position was really placed.
+  const c = commitmentFor(sk, marketId, outcome, tickets);
   const path = betPath(c);
   assert(path.leaf == c, "path is not for this commitment");
-  // disclose(): the candidate root is public history — it reveals nothing about
-  // WHICH leaf the path proves membership of.
+  // The candidate root is public history; it says nothing about which leaf.
   assert(
-    commitments.checkRoot(disclose(merkleTreePathRoot<10, Bytes<32>>(path))),
+    commitments.checkRoot(disclose(merkleTreePathRoot<12, Bytes<32>>(path))),
     "commitment not in tree"
   );
 
-  // spend-once
-  const nul = nullifierFor(sk);
+  // Spend once. Nullifier is market-scoped so one secret can bet many markets.
+  const nul = nullifierFor(sk, marketId);
   assert(!nullifiers.member(disclose(nul)), "already claimed");
   nullifiers.insert(disclose(nul));
 
-  // Payout in ticket units. disclose: claiming inherently reveals win/loss and
-  // amount — the payout is a public treasury delta.
-  // (Documented leak: bet<->claim linkable when your ticket count is unique.)
-  const payoutTickets = disclose(claimableTickets(outcome, tickets));
+  // Claiming reveals win/loss and amount by construction — the payout is a
+  // public treasury delta. (Known leak: a unique ticket count links bet<->claim.)
+  const payoutTickets = disclose(claimableTickets(m, f, marketId, outcome, tickets));
 
   if (payoutTickets > 0) {
-    // Money out: spend the merged treasury coin, pay a FRESH shielded
-    // output — recipient identity never appears on the ledger.
     assert(treasuryFunded, "treasury empty");
     const amount = (payoutTickets * ticketPrice()) as Uint<128>;
     assert(treasury.value >= amount, "treasury too small");
@@ -231,33 +321,40 @@ export circuit claim(): Uint<64> {
   return payoutTickets;
 }
 
-// Payout logic in ticket units: refund on VOID/PUSH, pro-rata pot share on WIN.
-circuit claimableTickets(outcome: Uint<8>, tickets: Uint<32>): Uint<64> {
-  // VOID => refund stake
-  if (status == MarketStatus.VOID) {
+circuit claimableTickets(
+  m: MarketParams,
+  f: EventFact,
+  marketId: Bytes<32>,
+  outcome: Uint<8>,
+  tickets: Uint<32>
+): Uint<64> {
+  // Event voided => stake back.
+  if (f.status == EventStatus.VOID) {
     return tickets as Uint<64>;
   }
 
-  const result = resolveOutcome();
+  const result = outcomeOf(m, f);
 
-  // PUSH => refund stake
+  // Push => stake back.
   if (result == 2) {
     return tickets as Uint<64>;
   }
 
-  // lost => nothing (nullifier already burned: no re-try with a different story)
   const won = disclose((result == 0 && outcome == 0) || (result == 1 && outcome == 1));
   if (!won) {
     return 0;
   }
 
-  // WIN => witness-quotient division over the full pot
+  // Pro-rata over the whole pot. Compact has no division, so the prover
+  // supplies the quotient and the circuit checks it is the exact floor:
+  //   q*W <= k*T < (q+1)*W
+  const poolA = poolOf(marketId, 0);
+  const poolB = poolOf(marketId, 1);
   const totalT = (poolA + poolB) as Uint<64>;
   const winW = result == 0 ? poolA : poolB;
   assert(winW >= 1, "empty winning pool");
   const k = tickets as Uint<64>;
   const q = payoutQuotient();
-  // q*W <= k*T < (q+1)*W   (products fit Uint<128>)
   const kT = k * totalT;
   const qW = q * winW;
   assert(qW <= kT, "quotient too big");

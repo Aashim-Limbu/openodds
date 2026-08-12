@@ -305,13 +305,13 @@ export type OpenOddsProviders = Awaited<ReturnType<typeof configureProviders>>;
 export const deployOpenOdds = async (
   providers: OpenOddsProviders,
   initialPrivateState: OpenOddsPrivateState,
-  args: { oracleKeyHash: Uint8Array; marketType: bigint; halfLine: bigint; favIsHome: boolean },
+  oracleKeyHash: Uint8Array,
 ) => {
   const deployed = await deployContract(providers as any, {
     compiledContract: openoddsCompiledContract,
     privateStateId: OpenOddsPrivateStateId,
     initialPrivateState,
-    args: [args.oracleKeyHash, args.marketType, args.halfLine, args.favIsHome],
+    args: [oracleKeyHash],
   } as any);
   return deployed;
 };

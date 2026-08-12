@@ -1,8 +1,6 @@
-// E1/E3 spike runner: deploy OpenOdds on the live standalone stack, run the
-// bet -> resolve -> claim round trip, print timings. Scripted, no menu.
-//
-// Usage:  node src/spike.ts e1     (default)
-//         node src/spike.ts e3
+// Live-chain runner for the multi-market contract.
+//   node src/spike.ts e1     full slate: 2 markets on 1 event, bets, resolve, claims
+//   node src/spike.ts e3     block interval + same-wallet contention
 import crypto from 'node:crypto';
 import * as Rx from 'rxjs';
 import { shieldedToken } from '@midnight-ntwrk/ledger-v8';
@@ -14,7 +12,6 @@ import {
   deployOpenOdds,
   joinOpenOdds,
   type OpenOddsProviders,
-  OpenOddsPrivateStateId,
   patchPrivateState,
   pureCircuits,
   readLedger,
@@ -24,15 +21,21 @@ import {
 } from './api.ts';
 
 const rand32 = () => crypto.getRandomValues(new Uint8Array(32));
-const NATIVE_COLOR = new Uint8Array(32); // shielded native token
-const makeCoin = (value: bigint) => ({ nonce: rand32(), color: NATIVE_COLOR, value });
-const hex = (b: Uint8Array) => Buffer.from(b).toString('hex');
+const b = (fill: number) => new Uint8Array(32).fill(fill);
+const NATIVE = new Uint8Array(32);
+const TICKET_PRICE = 100n;
+const coinFor = (tickets: bigint) => ({ nonce: rand32(), color: NATIVE, value: tickets * TICKET_PRICE });
+
+const ORACLE_SK = b(7);
+const EVENT = b(0xe0);
+const MKT_SPREAD = b(0x10);
+const MKT_TOTAL = b(0x11);
 
 const wall = new Map<string, number>();
 const phase = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
   setPhase(name);
-  console.log(`\n== ${name} ==`);
   const t0 = Date.now();
+  console.log(`\n== ${name} ==`);
   try {
     return await fn();
   } finally {
@@ -41,19 +44,19 @@ const phase = async <T>(name: string, fn: () => Promise<T>): Promise<T> => {
   }
 };
 
-const shieldedBalance = async (ctx: WalletContext): Promise<bigint> => {
-  const state = await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.filter((s) => s.isSynced)));
-  return state.shielded.balances[shieldedToken().raw] ?? 0n;
-};
-
 const printTimings = () => {
-  console.log('\n---- timing table (seconds) ----');
-  console.log('phase      wall    prove   balance  submit');
+  console.log('\n---- timings (seconds) ----');
+  console.log('phase          wall   prove balance  submit');
   for (const [name, ms] of wall) {
     const t = timings.get(name) ?? {};
-    const f = (x?: number) => (x === undefined ? '   -' : (x / 1000).toFixed(1).padStart(6));
-    console.log(`${name.padEnd(10)} ${(ms / 1000).toFixed(1).padStart(6)} ${f(t.prove)} ${f(t.balance)} ${f(t.submit)}`);
+    const f = (x?: number) => (x === undefined ? '     -' : (x / 1000).toFixed(1).padStart(6));
+    console.log(`${name.padEnd(14)}${(ms / 1000).toFixed(1).padStart(6)}${f(t.prove)}${f(t.balance)}${f(t.submit)}`);
   }
+};
+
+const shieldedBalance = async (ctx: WalletContext): Promise<bigint> => {
+  const s = await Rx.firstValueFrom(ctx.wallet.state().pipe(Rx.filter((x) => x.isSynced)));
+  return s.shielded.balances[shieldedToken().raw] ?? 0n;
 };
 
 const setup = async () => {
@@ -64,124 +67,96 @@ const setup = async () => {
   return { config, ctx, providers };
 };
 
-const deployMarket = async (providers: OpenOddsProviders, oracleSk: Uint8Array, betSecret: Uint8Array) => {
-  const oracleKeyHash = pureCircuits.oracleKhOf(oracleSk);
-  const contract = await deployOpenOdds(providers, createPrivateState(betSecret, oracleSk), {
-    oracleKeyHash,
-    marketType: 1n, // spread
-    halfLine: 13n, // -6.5
-    favIsHome: true,
-  });
-  const address = contract.deployTxData.public.contractAddress;
-  console.log(`contract address: ${address}`);
-  return { contract, address };
-};
-
-const dumpLedger = async (providers: OpenOddsProviders, address: string) => {
+const dumpPools = async (providers: OpenOddsProviders, address: string, label: string) => {
   const cs = await providers.publicDataProvider.queryContractState(address);
   if (cs == null) throw new Error('no contract state');
   const l = readLedger(cs.data) as any;
+  const pool = (m: Uint8Array, o: bigint) => {
+    const k = pureCircuits.poolKey(m, o);
+    return l.pools.member(k) ? l.pools.lookup(k) : 0n;
+  };
   console.log(
-    `ledger: status=${l.status} poolA=${l.poolA} poolB=${l.poolB}` +
-      (typeof l.treasury === 'object'
-        ? ` treasury={value:${l.treasury.value}, mt_index:${l.treasury.mt_index}, nonce:${hex(l.treasury.nonce).slice(0, 16)}...}`
-        : ''),
+    `${label}: spread ${pool(MKT_SPREAD, 0n)}/${pool(MKT_SPREAD, 1n)}` +
+      `  total ${pool(MKT_TOTAL, 0n)}/${pool(MKT_TOTAL, 1n)}` +
+      `  treasury ${l.treasury?.value ?? 0} funded=${l.treasuryFunded}`,
   );
   return l;
 };
 
-// ---------------- E1 ----------------
 const runE1 = async () => {
   const { ctx, providers } = await setup();
-  const oracleSk = new Uint8Array(32).fill(7);
-  const s1 = rand32();
-  const s2 = rand32();
-
+  const alice = rand32();
   const bal0 = await shieldedBalance(ctx);
-  console.log(`shielded native balance at start: ${bal0}`);
+  console.log(`shielded balance at start: ${bal0}`);
 
-  const { contract, address } = await phase('deploy', () => deployMarket(providers, oracleSk, s1));
+  const contract = await phase('deploy', () =>
+    deployOpenOdds(providers, createPrivateState(alice, ORACLE_SK), pureCircuits.oracleKhOf(ORACLE_SK)),
+  );
+  const address = contract.deployTxData.public.contractAddress;
+  console.log(`contract: ${address}`);
 
-  // bet 1: outcome 0 (favorite covers), 3 tickets => 300
-  const coin1 = makeCoin(300n);
-  await phase('bet1', async () => {
-    await patchPrivateState(providers, { secretKey: s1, outcome: 0n, tickets: 3n });
-    await contract.callTx.placeBet(coin1, 0n, 3n);
+  // A slate: one event, two markets derived from the same future score fact.
+  await phase('createEvent', () => contract.callTx.createEvent(EVENT).then(() => undefined));
+  await phase('createMarket:spread', () =>
+    contract.callTx.createMarket(MKT_SPREAD, EVENT, 1n, 13n, true).then(() => undefined),
+  );
+  await phase('createMarket:total', () =>
+    contract.callTx.createMarket(MKT_TOTAL, EVENT, 2n, 83n, true).then(() => undefined),
+  );
+
+  // Alice backs the favourite on the spread and the under on the total.
+  await phase('bet:spread', async () => {
+    await patchPrivateState(providers, { secretKey: alice, marketId: MKT_SPREAD, outcome: 0n, tickets: 3n });
+    await contract.callTx.placeBet(coinFor(3n), MKT_SPREAD, 0n, 3n);
   });
-  await dumpLedger(providers, address);
-
-  // bet 2: same wallet, distinct secret, outcome 1, 7 tickets => 700
-  const coin2 = makeCoin(700n);
-  await phase('bet2', async () => {
-    await patchPrivateState(providers, { secretKey: s2, outcome: 1n, tickets: 7n });
-    await contract.callTx.placeBet(coin2, 1n, 7n);
+  const bob = rand32();
+  await phase('bet:spread:other', async () => {
+    await patchPrivateState(providers, { secretKey: bob, marketId: MKT_SPREAD, outcome: 1n, tickets: 7n });
+    await contract.callTx.placeBet(coinFor(7n), MKT_SPREAD, 1n, 7n);
   });
-  await dumpLedger(providers, address);
+  await dumpPools(providers, address, 'after spread bets');
 
-  // resolve: 48-34, favorite (home) covers -6.5
-  await phase('resolve', async () => {
-    await contract.callTx.postScore(48n, 34n);
-  });
-  const l = await dumpLedger(providers, address);
+  // ONE fact settles the whole slate.
+  await phase('postScore', () => contract.callTx.postScore(EVENT, 48n, 34n).then(() => undefined));
+  await dumpPools(providers, address, 'after resolve');
 
-  // treasury coin discovery
-  const zswapAndState = await providers.publicDataProvider.queryZSwapAndContractState(address);
-  const zswapChainState = zswapAndState?.[0];
-  console.log(`contract zswap chain state firstFree: ${zswapChainState?.firstFree}`);
+  const before = await shieldedBalance(ctx);
+  const recipient = new Uint8Array(Buffer.from(providers.walletProvider.getCoinPublicKey(), 'hex'));
+  await new Promise((r) => setTimeout(r, 12_000)); // let the tree settle
+  const fresh = await joinOpenOdds(providers, address);
 
-  const balBeforeClaim = await shieldedBalance(ctx);
-  console.log(`shielded balance before claim: ${balBeforeClaim} (delta so far ${balBeforeClaim - bal0})`);
-
-  // claim bet 1: q = floor(k*T/W) = floor(3*10/3) = 10 => 1000
-  const payoutRecipient = Buffer.from(providers.walletProvider.getCoinPublicKey(), 'hex');
-  console.log(`payout recipient pk bytes: ${payoutRecipient.length}`);
-  // settle a couple of blocks, then re-acquire the handle so the claim's
-  // spend proof is built against the CURRENT zswap tree (stale-cache => 138)
-  await new Promise((r) => setTimeout(r, 15_000));
-  const freshContract = await joinOpenOdds(providers, address);
-  try {
-    await phase('claim', async () => {
-      // treasury is a merged ledger coin now — the circuit reads it itself
-      await patchPrivateState(providers, {
-        secretKey: s1,
-        outcome: 0n,
-        tickets: 3n,
-        quotient: 10n,
-        payoutRecipient: new Uint8Array(payoutRecipient),
-      });
-      const res = await freshContract.callTx.claim();
-      console.log(`claim payout tickets: ${(res as any).private?.result ?? '(see tx)'}`);
+  await phase('claim:winner', async () => {
+    // favourite covered: alice takes the whole 10-ticket pot
+    await patchPrivateState(providers, {
+      secretKey: alice,
+      marketId: MKT_SPREAD,
+      outcome: 0n,
+      tickets: 3n,
+      quotient: 10n,
+      payoutRecipient: recipient,
     });
-  } catch (e) {
-    console.error(`CLAIM FAILED: ${(e as Error).message}`);
-    printTimings();
-    process.exit(1);
-  }
+    const r = await fresh.callTx.claim();
+    console.log(`payout tickets: ${(r as any).private?.result ?? '(see tx)'}`);
+  });
 
-  // wait for the wallet to see the payout output
-  const balAfter = await Rx.firstValueFrom(
+  const after = await Rx.firstValueFrom(
     ctx.wallet.state().pipe(
       Rx.throttleTime(2_000),
       Rx.filter((s) => s.isSynced),
       Rx.map((s) => s.shielded.balances[shieldedToken().raw] ?? 0n),
-      Rx.filter((b) => b > balBeforeClaim),
+      Rx.filter((x) => x > before),
       Rx.timeout({ first: 120_000 }),
     ),
   ).catch(async () => shieldedBalance(ctx));
-  console.log(`shielded balance after claim: ${balAfter} (claim delta ${balAfter - balBeforeClaim})`);
-  await dumpLedger(providers, address);
+  console.log(`claim delta: ${after - before} (expected ${10n * TICKET_PRICE})`);
+  await dumpPools(providers, address, 'after claim');
 
   printTimings();
   process.exit(0);
 };
 
-// ---------------- E3 ----------------
 const runE3 = async () => {
-  const { config, ctx, providers } = await setup();
-  const oracleSk = new Uint8Array(32).fill(7);
-  const s1 = rand32();
-
-  // (b) block interval from the indexer
+  const { config, providers } = await setup();
   const gql = async (query: string) => {
     const res = await fetch(config.indexer, {
       method: 'POST',
@@ -193,33 +168,35 @@ const runE3 = async () => {
   const b1 = (await gql('{ block { height timestamp } }')).data.block;
   await new Promise((r) => setTimeout(r, 30_000));
   const b2 = (await gql('{ block { height timestamp } }')).data.block;
-  console.log(`block sample 1: ${JSON.stringify(b1)}`);
-  console.log(`block sample 2: ${JSON.stringify(b2)}`);
   const dt = new Date(b2.timestamp).getTime() - new Date(b1.timestamp).getTime();
   console.log(`block interval: ${(dt / (b2.height - b1.height) / 1000).toFixed(2)}s over ${b2.height - b1.height} blocks`);
 
-  // (a) same-block contention: two placeBets fired concurrently from one wallet
-  const { contract } = await phase('deploy-e3', () => deployMarket(providers, oracleSk, s1));
-  await patchPrivateState(providers, { secretKey: s1, outcome: 0n, tickets: 1n });
+  const sk = rand32();
+  const contract = await phase('deploy-e3', () =>
+    deployOpenOdds(providers, createPrivateState(sk, ORACLE_SK), pureCircuits.oracleKhOf(ORACLE_SK)),
+  );
+  await contract.callTx.createEvent(EVENT);
+  await contract.callTx.createMarket(MKT_SPREAD, EVENT, 1n, 13n, true);
+  await patchPrivateState(providers, { secretKey: sk, marketId: MKT_SPREAD, outcome: 0n, tickets: 1n });
+
   setPhase('contention');
   const results = await Promise.allSettled([
-    contract.callTx.placeBet(makeCoin(100n), 0n, 1n),
-    contract.callTx.placeBet(makeCoin(100n), 0n, 1n),
+    contract.callTx.placeBet(coinFor(1n), MKT_SPREAD, 0n, 1n),
+    contract.callTx.placeBet(coinFor(1n), MKT_SPREAD, 0n, 1n),
   ]);
-  results.forEach((r, i) => {
-    if (r.status === 'fulfilled') {
-      console.log(`concurrent bet ${i}: OK block ${(r.value as any).public.blockHeight}`);
-    } else {
-      console.log(`concurrent bet ${i}: FAILED: ${(r.reason as Error).message}`);
-    }
-  });
+  results.forEach((r, i) =>
+    console.log(
+      r.status === 'fulfilled'
+        ? `concurrent bet ${i}: OK block ${(r.value as any).public.blockHeight}`
+        : `concurrent bet ${i}: FAILED: ${(r.reason as Error).message.split('\n')[0]}`,
+    ),
+  );
   process.exit(0);
 };
 
-const mode = process.argv[2] ?? 'e1';
 process.on('unhandledRejection', (e) => {
   console.error('unhandled rejection:', e);
   process.exit(1);
 });
-if (mode === 'e3') await runE3();
+if ((process.argv[2] ?? 'e1') === 'e3') await runE3();
 else await runE1();
