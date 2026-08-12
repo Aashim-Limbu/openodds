@@ -56,8 +56,18 @@ constructor(
   status = MarketStatus.OPEN;
 }
 
+// ---------- constants ----------
+// ponytail: fixed ticket price; per-market pricing when multi-market lands
+export circuit ticketPrice(): Uint<128> {
+  return 100;
+}
+
 // ---------- witnesses (private inputs, provided by local TS) ----------
 witness betSecret(): Bytes<32>;
+// treasury coin to pay a claim from, discovered off-chain from the indexer
+witness treasuryCoin(): QualifiedShieldedCoinInfo;
+// claimant's shielded address: a fresh Zswap output, unlinkable to the bet
+witness payoutRecipient(): ZswapCoinPublicKey;
 witness betOutcome(): Uint<8>;
 witness betTickets(): Uint<32>;
 witness betPath(commitment: Bytes<32>): MerkleTreePath<10, Bytes<32>>;
@@ -107,10 +117,16 @@ circuit resolveOutcome(): Uint<8> {
 
 // ---------- circuits ----------
 
-export circuit placeBet(outcome: Uint<8>, tickets: Uint<32>): [] {
+export circuit placeBet(coin: ShieldedCoinInfo, outcome: Uint<8>, tickets: Uint<32>): [] {
   assert(status == MarketStatus.OPEN, "market closed");
   assert(outcome <= 1, "bad outcome");
   assert(tickets >= 1, "zero tickets");
+  // Escrow the stake: shielded coin has no payer field — WHO is betting is
+  // never on the ledger. Stateless treasury (OZ pattern): just receive;
+  // claims spend treasury coins discovered off-chain.
+  assert(coin.color == nativeToken(), "wrong token");
+  assert(coin.value == (tickets * ticketPrice()) as Uint<128>, "stake != tickets * price");
+  receiveShielded(disclose(coin));
   // Anonymous position: only the commitment goes in the tree.
   const c = commitmentFor(betSecret(), outcome, tickets);
   commitments.insert(disclose(c));
@@ -171,24 +187,43 @@ export circuit claim(): Uint<64> {
   assert(!nullifiers.member(disclose(nul)), "already claimed");
   nullifiers.insert(disclose(nul));
 
+  // Payout in ticket units. disclose: claiming inherently reveals win/loss and
+  // amount — the payout is a public treasury delta.
+  // (Documented leak: bet<->claim linkable when your ticket count is unique.)
+  const payoutTickets = disclose(claimableTickets(outcome, tickets));
+
+  if (payoutTickets > 0) {
+    // Money out: spend a treasury coin (discovered off-chain), pay a FRESH
+    // shielded output — recipient identity never appears on the ledger.
+    const tc = treasuryCoin();
+    assert(tc.color == nativeToken(), "bad treasury coin");
+    const amount = (payoutTickets * ticketPrice()) as Uint<128>;
+    assert(disclose(tc.value) >= amount, "treasury coin too small");
+    sendShielded(
+      disclose(tc),
+      left<ZswapCoinPublicKey, ContractAddress>(disclose(payoutRecipient())),
+      amount
+    );
+  }
+  return payoutTickets;
+}
+
+// Payout logic in ticket units: refund on VOID/PUSH, pro-rata pot share on WIN.
+circuit claimableTickets(outcome: Uint<8>, tickets: Uint<32>): Uint<64> {
   // VOID => refund stake
   if (status == MarketStatus.VOID) {
-    return disclose(tickets as Uint<64>);
+    return tickets as Uint<64>;
   }
 
   const result = resolveOutcome();
 
   // PUSH => refund stake
   if (result == 2) {
-    return disclose(tickets as Uint<64>);
+    return tickets as Uint<64>;
   }
 
-  // lost => nothing (nullifier still burned above: no re-try with a different story)
-  // disclose: claiming inherently reveals win/loss — the payout amount is public.
-  // (Documented leak: bet<->claim linkable when your ticket count is unique.)
-  const won = disclose(
-    (result == 0 && outcome == 0) || (result == 1 && outcome == 1)
-  );
+  // lost => nothing (nullifier already burned: no re-try with a different story)
+  const won = disclose((result == 0 && outcome == 0) || (result == 1 && outcome == 1));
   if (!won) {
     return 0;
   }
@@ -204,5 +239,5 @@ export circuit claim(): Uint<64> {
   const qW = q * winW;
   assert(qW <= kT, "quotient too big");
   assert(kT < qW + winW, "quotient too small");
-  return disclose(q);
+  return q;
 }

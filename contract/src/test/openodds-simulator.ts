@@ -72,8 +72,17 @@ export class OpenOddsSimulator {
   placeBet(outcome: bigint, tickets: bigint): Ledger {
     // witnesses must agree with the bet being placed
     this.patchUser({ outcome, tickets });
+    // stake coin: native token, value = tickets * price, fresh nonce per bet
+    const nonce = new Uint8Array(32);
+    crypto.getRandomValues(nonce);
+    const coin = {
+      nonce,
+      color: new Uint8Array(32), // nativeToken() == 32 zero bytes
+      value: tickets * 100n,
+    };
     this.circuitContext = this.contract.impureCircuits.placeBet(
       this.circuitContext,
+      coin,
       outcome,
       tickets,
     ).context;
@@ -97,6 +106,18 @@ export class OpenOddsSimulator {
   }
 
   claim(): bigint {
+    // wallet-layer work: discover a treasury coin + derive a fresh payout address
+    const nonce = new Uint8Array(32);
+    crypto.getRandomValues(nonce);
+    this.patchUser({
+      treasuryCoin: {
+        nonce,
+        color: new Uint8Array(32),
+        value: 1_000_000n,
+        mt_index: 0n,
+      },
+      payoutRecipient: new Uint8Array(32).fill(0x77),
+    });
     const r = this.contract.impureCircuits.claim(this.circuitContext);
     this.circuitContext = r.context;
     return r.result;

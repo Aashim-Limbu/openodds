@@ -4,6 +4,13 @@ export enum MarketStatus { OPEN = 0, RESOLVED = 1, VOID = 2 }
 
 export type Witnesses<PS> = {
   betSecret(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, Uint8Array];
+  treasuryCoin(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, { nonce: Uint8Array,
+                                                                             color: Uint8Array,
+                                                                             value: bigint,
+                                                                             mt_index: bigint
+                                                                           }];
+  payoutRecipient(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, { bytes: Uint8Array
+                                                                              }];
   betOutcome(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, bigint];
   betTickets(context: __compactRuntime.WitnessContext<Ledger, PS>): [PS, bigint];
   betPath(context: __compactRuntime.WitnessContext<Ledger, PS>,
@@ -18,6 +25,7 @@ export type Witnesses<PS> = {
 
 export type ImpureCircuits<PS> = {
   placeBet(context: __compactRuntime.CircuitContext<PS>,
+           coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint },
            outcome_0: bigint,
            tickets_0: bigint): __compactRuntime.CircuitResults<PS, []>;
   postScore(context: __compactRuntime.CircuitContext<PS>,
@@ -29,6 +37,7 @@ export type ImpureCircuits<PS> = {
 
 export type ProvableCircuits<PS> = {
   placeBet(context: __compactRuntime.CircuitContext<PS>,
+           coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint },
            outcome_0: bigint,
            tickets_0: bigint): __compactRuntime.CircuitResults<PS, []>;
   postScore(context: __compactRuntime.CircuitContext<PS>,
@@ -39,12 +48,14 @@ export type ProvableCircuits<PS> = {
 }
 
 export type PureCircuits = {
+  ticketPrice(): bigint;
   commitmentFor(sk_0: Uint8Array, outcome_0: bigint, tickets_0: bigint): Uint8Array;
   nullifierFor(sk_0: Uint8Array): Uint8Array;
   oracleKhOf(sk_0: Uint8Array): Uint8Array;
 }
 
 export type Circuits<PS> = {
+  ticketPrice(context: __compactRuntime.CircuitContext<PS>): __compactRuntime.CircuitResults<PS, bigint>;
   commitmentFor(context: __compactRuntime.CircuitContext<PS>,
                 sk_0: Uint8Array,
                 outcome_0: bigint,
@@ -52,6 +63,7 @@ export type Circuits<PS> = {
   nullifierFor(context: __compactRuntime.CircuitContext<PS>, sk_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
   oracleKhOf(context: __compactRuntime.CircuitContext<PS>, sk_0: Uint8Array): __compactRuntime.CircuitResults<PS, Uint8Array>;
   placeBet(context: __compactRuntime.CircuitContext<PS>,
+           coin_0: { nonce: Uint8Array, color: Uint8Array, value: bigint },
            outcome_0: bigint,
            tickets_0: bigint): __compactRuntime.CircuitResults<PS, []>;
   postScore(context: __compactRuntime.CircuitContext<PS>,
