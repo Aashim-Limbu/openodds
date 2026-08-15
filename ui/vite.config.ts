@@ -1,5 +1,6 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 import wasm from 'vite-plugin-wasm';
 import topLevelAwait from 'vite-plugin-top-level-await';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
@@ -36,6 +37,7 @@ const zkAssets = () => ({
 export default defineConfig({
   plugins: [
     react(),
+    tailwindcss(),
     wasm(),
     topLevelAwait(),
     // abstract-level extends events.EventEmitter; the wallet SDK + compact-runtime
@@ -44,6 +46,7 @@ export default defineConfig({
     zkAssets(),
   ],
   resolve: {
+    alias: { '@': path.resolve(__dirname, 'src') },
     // one wasm instance only: the managed contract resolves compact-runtime from
     // ../contract, everything else from ui/node_modules. Two copies => broken instanceof.
     dedupe: [

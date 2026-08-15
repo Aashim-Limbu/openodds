@@ -1,183 +1,186 @@
-import { Buffer } from 'buffer';
-import { useState } from 'react';
-import {
-  GENESIS_SEED,
-  buildWallet,
-  config,
-  configureProviders,
-  deployMarket,
-  joinMarket,
-  patchPrivateState,
-  readPools,
-  type OpenOddsProviders,
-  type WalletContext,
-} from './midnight.ts';
+import { useEffect, useState } from 'react';
+import { CheckIcon, CopyIcon, MoonIcon, RefreshCwIcon, SunIcon } from 'lucide-react';
 
-const rand32 = () => crypto.getRandomValues(new Uint8Array(32));
-const randId = () => rand32();
-const NATIVE = new Uint8Array(32);
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Toaster } from '@/components/ui/toast';
+import { BetSlip } from '@/components/bet-slip';
+import { Board, type Slip } from '@/components/board';
+import { OraclePanel } from '@/components/oracle-panel';
+import { Positions } from '@/components/positions';
+import { PrivacyPanel } from '@/components/privacy-panel';
+import { WalletBar } from '@/components/wallet-bar';
+import { TICKET_PRICE } from '@/lib/midnight';
+import { fmtInt, shortId } from '@/lib/odds';
+import { OpenOddsProvider, useOpenOdds } from '@/state/openodds';
 
-export function App() {
-  const [lines, setLines] = useState<string[]>([]);
-  const [seed, setSeed] = useState(GENESIS_SEED);
-  const [address, setAddress] = useState('');
-  const [marketId, setMarketId] = useState('');
-  const [proofServer, setProofServer] = useState(config.proofServer);
-  const [ctx, setCtx] = useState<WalletContext | null>(null);
-  const [providers, setProviders] = useState<OpenOddsProviders | null>(null);
-  const [busy, setBusy] = useState(false);
+function Mark() {
+  return (
+    <svg viewBox="0 0 24 24" className="size-7 shrink-0" aria-hidden="true">
+      <circle cx="12" cy="12" r="10" className="fill-primary" />
+      <path d="M12 2a10 10 0 0 1 0 20Z" className="fill-chart-2" />
+    </svg>
+  );
+}
 
-  const log = (m: string) => {
-    console.log('[openodds]', m);
-    setLines((l) => [...l, `${new Date().toISOString().slice(11, 19)} ${m}`]);
-  };
-  const run = (name: string, fn: () => Promise<void>) => async () => {
-    setBusy(true);
-    const t0 = Date.now();
-    log(`-- ${name}`);
-    try {
-      await fn();
-      log(`-- ${name} ok in ${((Date.now() - t0) / 1000).toFixed(1)}s`);
-    } catch (e) {
-      console.error(e);
-      log(`!! ${name} FAILED: ${(e as Error).message}`);
-    } finally {
-      setBusy(false);
-    }
-  };
+function ThemeToggle() {
+  const [dark, setDark] = useState(
+    () => typeof matchMedia === 'function' && matchMedia('(prefers-color-scheme: dark)').matches,
+  );
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark);
+  }, [dark]);
+  return (
+    <Button
+      variant="ghost"
+      size="icon"
+      aria-label={dark ? 'Switch to light theme' : 'Switch to dark theme'}
+      onClick={() => setDark((d) => !d)}
+    >
+      {dark ? <SunIcon /> : <MoonIcon />}
+    </Button>
+  );
+}
 
-  const detectLace = run('detect lace', async () => {
-    const mn = (window as any).midnight;
-    log(`window.midnight = ${mn ? Object.keys(mn).join(',') : 'undefined (no extension)'}`);
-  });
-
-  const checkZk = run('fetch zk artifacts', async () => {
-    for (const p of ['keys/placeBet.prover', 'keys/placeBet.verifier', 'zkir/placeBet.bzkir']) {
-      const r = await fetch(`${config.zkBaseUrl}/${p}`);
-      log(`${p}: ${r.status} ${(await r.arrayBuffer()).byteLength} bytes`);
-    }
-  });
-
-  const checkProofServer = run('proof server reachability', async () => {
-    for (const url of ['http://127.0.0.1:6300', 'https://proof-server.preview.midnight.network']) {
-      try {
-        const r = await fetch(`${url}/health`);
-        log(`${url} -> ${r.status} ${await r.text()}`);
-      } catch (e) {
-        log(`${url} -> ${(e as Error).message}`);
-      }
-    }
-  });
-
-  const doReadPools = run('read ledger', async () => {
-    log(JSON.stringify(await readPools(address.trim())));
-  });
-
-  const connect = run('connect wallet', async () => {
-    config.proofServer = proofServer.trim();
-    log(`proof server: ${config.proofServer}`);
-    const c = await buildWallet(seed.trim(), log);
-    setCtx(c);
-    const p = await configureProviders(c);
-    setProviders(p);
-    log(`coin pk ${p.walletProvider.getCoinPublicKey()}`);
-  });
-
-  const deploy = run('deploy + createEvent + createMarket', async () => {
-    if (!providers) throw new Error('connect first');
-    const d = await deployMarket(providers, new Uint8Array(32).fill(7), rand32());
-    const addr = d.deployTxData.public.contractAddress;
-    setAddress(addr);
-    log(`deployed at ${addr}`);
-    const eventId = randId();
-    const mid = randId();
-    setMarketId(Buffer.from(mid).toString('hex'));
-    // same handle is fine here: strictly sequential, no coins involved
-    await (d as any).callTx.createEvent(eventId);
-    log('createEvent ok');
-    await (d as any).callTx.createMarket(mid, eventId, 1n, 13n, true);
-    log(`createMarket ok, marketId=${Buffer.from(mid).toString('hex').slice(0, 8)}`);
-  });
-
-  const bet = run('place bet', async () => {
-    if (!providers) throw new Error('connect first');
-    const mid = Uint8Array.from(Buffer.from(marketId.trim(), 'hex'));
-    const contract = await joinMarket(providers, address.trim());
-    await patchPrivateState(providers, {
-      secretKey: rand32(),
-      marketId: mid,
-      outcome: 0n,
-      tickets: 3n,
-    });
-    const res: any = await (contract as any).callTx.placeBet(
-      { nonce: rand32(), color: NATIVE, value: 300n },
-      mid,
-      0n,
-      3n,
-    );
-    log(`bet landed in block ${res.public?.blockHeight}`);
-    log(JSON.stringify(await readPools(address.trim())));
-  });
-
-  // E3 in the browser: node failed concurrent txs on the LevelDB single-open lock.
-  // IndexedDB has no such lock, so re-check whether the browser needs a tx queue too.
-  const concurrent = run('two concurrent bets', async () => {
-    if (!providers) throw new Error('connect first');
-    const mid = Uint8Array.from(Buffer.from(marketId.trim(), 'hex'));
-    const contract = await joinMarket(providers, address.trim());
-    await patchPrivateState(providers, { secretKey: rand32(), marketId: mid, outcome: 0n, tickets: 1n });
-    const one = () =>
-      (contract as any).callTx.placeBet({ nonce: rand32(), color: NATIVE, value: 100n }, mid, 0n, 1n);
-    const rs = await Promise.allSettled([one(), one()]);
-    rs.forEach((r, i) =>
-      log(
-        r.status === 'fulfilled'
-          ? `bet ${i}: OK block ${(r.value as any).public?.blockHeight}`
-          : `bet ${i}: FAILED ${(r.reason as Error).message}`,
-      ),
-    );
-  });
-
-  const B = (p: { on: () => void; children: string; need?: boolean }) => (
-    <button onClick={p.on} disabled={busy || p.need === false} style={{ marginRight: 6 }}>
-      {p.children}
+function Copyable({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <button
+      type="button"
+      className="inline-flex items-center gap-1 font-mono hover:text-foreground"
+      onClick={() => {
+        void navigator.clipboard?.writeText(text);
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1200);
+      }}
+    >
+      {shortId(text)}
+      {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
     </button>
   );
+}
+
+function ChainStrip() {
+  const { board, boardError, settings, refresh } = useOpenOdds();
+  if (!settings.contract) return null;
+
+  const pot = board ? board.markets.reduce((sum, m) => sum + m.pool0 + m.pool1, 0n) : 0n;
 
   return (
-    <div style={{ fontFamily: 'monospace', padding: 16 }}>
-      <h3>OpenOdds browser spike {busy ? '(busy…)' : ''}</h3>
-      <div>
-        seed <input value={seed} onChange={(e) => setSeed(e.target.value)} size={70} />
+    <div className="border-b bg-muted/40">
+      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-1 px-4 py-2 text-xs text-muted-foreground">
+        <span className="flex items-center gap-1.5">
+          contract <Copyable text={settings.contract} />
+        </span>
+        <span className="tabular-nums">
+          {fmtInt(pot * TICKET_PRICE)} NIGHT in open pools
+        </span>
+        <span className="tabular-nums">
+          anonymity set {fmtInt(board?.anonymitySet ?? 0)}
+        </span>
+        <span className="ml-auto flex items-center gap-2">
+          {boardError ? (
+            <Badge variant="destructive">indexer unreachable</Badge>
+          ) : (
+            <span className="tabular-nums">
+              updated {board ? new Date(board.at).toLocaleTimeString() : '—'}
+            </span>
+          )}
+          <Button variant="ghost" size="icon" aria-label="Refresh markets" onClick={refresh}>
+            <RefreshCwIcon />
+          </Button>
+        </span>
       </div>
-      <div>
-        addr <input value={address} onChange={(e) => setAddress(e.target.value)} size={70} />
-      </div>
-      <div>
-        mkt <input value={marketId} onChange={(e) => setMarketId(e.target.value)} size={70} />
-      </div>
-      <div>
-        prv <input value={proofServer} onChange={(e) => setProofServer(e.target.value)} size={70} />
-        <button onClick={() => setProofServer('https://proof-server.preview.midnight.network')}>
-          use hosted
-        </button>
-      </div>
-      <p>
-        <B on={detectLace}>1. detect Lace</B>
-        <B on={checkZk}>2. fetch zk artifacts</B>
-        <B on={checkProofServer}>3. proof servers</B>
-        <B on={doReadPools} need={!!address}>4. read ledger</B>
-      </p>
-      <p>
-        <B on={connect}>5. connect wallet</B>
-        <B on={deploy} need={!!providers}>6. deploy + market</B>
-        <B on={bet} need={!!providers && !!address && !!marketId}>7. place bet</B>
-        <B on={concurrent} need={!!providers && !!address && !!marketId}>8. two concurrent bets</B>
-      </p>
-      <div>wallet: {ctx ? 'ready' : 'none'}</div>
-      <pre style={{ background: '#eee', padding: 8, maxHeight: '55vh', overflow: 'auto' }}>
-        {lines.join('\n')}
-      </pre>
     </div>
+  );
+}
+
+function ActivityLog() {
+  const { activity } = useOpenOdds();
+  if (activity.length === 0) return null;
+  return (
+    <footer className="border-t bg-muted/30">
+      <div className="mx-auto flex max-w-5xl flex-col gap-1 px-4 py-3">
+        {activity.slice(0, 4).map((entry) => (
+          <div key={entry.id} className="flex gap-3 font-mono text-xs">
+            <span className="tabular-nums text-muted-foreground">
+              {new Date(entry.at).toLocaleTimeString()}
+            </span>
+            <span className={entry.kind === 'error' ? 'text-destructive' : 'text-muted-foreground'}>
+              {entry.text}
+            </span>
+          </div>
+        ))}
+      </div>
+    </footer>
+  );
+}
+
+function Shell() {
+  const { positions } = useOpenOdds();
+  const [slip, setSlip] = useState<Slip | null>(null);
+
+  return (
+    <div className="flex min-h-svh flex-col">
+      <header className="sticky top-0 z-10 border-b bg-background/85 backdrop-blur">
+        <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
+          <Mark />
+          <div className="flex flex-col leading-none">
+            <span className="font-semibold tracking-tight">OpenOdds</span>
+            <span className="text-xs text-muted-foreground">
+              everyone watches the odds · no one watches the people
+            </span>
+          </div>
+          <div className="ml-auto flex items-center gap-2">
+            <ThemeToggle />
+            <WalletBar />
+          </div>
+        </div>
+      </header>
+
+      <ChainStrip />
+
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-6">
+        <Tabs defaultValue="markets">
+          <TabsList>
+            <TabsTrigger value="markets">Markets</TabsTrigger>
+            <TabsTrigger value="positions">
+              Positions
+              {positions.length > 0 && (
+                <Badge variant="secondary">{fmtInt(positions.length)}</Badge>
+              )}
+            </TabsTrigger>
+            <TabsTrigger value="oracle">Oracle</TabsTrigger>
+            <TabsTrigger value="privacy">Privacy</TabsTrigger>
+          </TabsList>
+
+          <TabsContent value="markets" className="pt-4">
+            <Board onPick={setSlip} />
+          </TabsContent>
+          <TabsContent value="positions" className="pt-4">
+            <Positions />
+          </TabsContent>
+          <TabsContent value="oracle" className="pt-4">
+            <OraclePanel />
+          </TabsContent>
+          <TabsContent value="privacy" className="pt-4">
+            <PrivacyPanel />
+          </TabsContent>
+        </Tabs>
+      </main>
+
+      <ActivityLog />
+      <BetSlip slip={slip} onClose={() => setSlip(null)} />
+      <Toaster />
+    </div>
+  );
+}
+
+export function App() {
+  return (
+    <OpenOddsProvider>
+      <Shell />
+    </OpenOddsProvider>
   );
 }
