@@ -102,12 +102,12 @@ export function PrivacyPanel() {
       <Card>
         <CardHeader>
           <CardTitle>Not built yet</CardTitle>
-          <CardDescription>Specified in PRODUCT.md, absent from this contract.</CardDescription>
+          <CardDescription>Designed, and not yet true of this deployment.</CardDescription>
         </CardHeader>
         <CardContent>
           <List
             items={[
-              'The 2-of-3 oracle committee. Today one key hash gates the fact; the Oracle tab holds it.',
+              'Three independent daemons. The 2-of-3 committee is in the contract and enforced by it, but all three seats currently run from one browser — the contract cannot tell whether the seats are really independent, and today they are not.',
               'The per-market designated auditor view key — the answer to "unauditable casino" — is designed but not in this deployment.',
               'Rake and treasury sweep: winners currently take the whole pot, and the contract charges nothing.',
               'Batch claim, house seeding, cash-out and parlays. Live betting is structurally blocked by a 25-30s transaction cycle.',

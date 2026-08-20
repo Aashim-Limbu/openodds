@@ -25,8 +25,11 @@ decisions are recorded in `docs/adr/`.
    from whom. The bet inserts a **Commitment** into one shared tree.
 3. The **Pools** move. They are public, because pools *are* the odds — a market that
    hides them is not a market.
-4. The Oracle writes one **Fact** for the Event: the score, in half-points. That single
-   Fact settles every Market on the Event ([ADR 0001](docs/adr/0001-one-fact-per-event.md)).
+4. The **Oracle committee** writes one **Fact** for the Event: the score, in half-points.
+   Three seats are sealed into the contract at deploy and an Event settles only when **two
+   of them file the same score**; three seats that disagree leave it disputed, which refunds
+   rather than guesses. That single Fact then settles every Market on the Event
+   ([ADR 0001](docs/adr/0001-one-fact-per-event.md)).
 5. The Bettor **Claims**. The claim proves that their Commitment is in the tree, burns a
    market-scoped **Nullifier** so it can never be claimed twice, derives its own result
    from the Fact in-circuit, and pays a fresh shielded output. No address, no name, and
@@ -42,9 +45,13 @@ The whole path runs end to end in a browser against a local Midnight stack, veri
 hand: deploy → create event → create two markets → two bets → post score → claim, with
 the payout landing in the wallet at exactly the pro-rata amount.
 
-- **Contract** (`contract/`) — 6 circuits, one deploy holding many markets, 34 passing
+- **Contract** (`contract/`) — 6 circuits, one deploy holding many markets, 43 passing
   tests including the full resolution matrix, pro-rata flooring, voids, multi-market
-  isolation and adversarial provers.
+  isolation, adversarial provers, and the committee's quorum and dispute paths.
+- **2-of-3 oracle committee** — three seat hashes sealed at deploy, quorum on two matching
+  scores, `DISPUTED` on a three-way disagreement, and a void path out of it. A seat proves
+  itself by knowing a preimage, because this platform has no signature-verification
+  circuits. The board shows the vote in progress: *"1 of 3 seats reported"*.
 - **Frontend** (`ui/`) — markets board with live pools and implied odds, bet slip with
   payout preview and privacy warnings, positions with claim, an oracle panel, and a
   privacy disclosure page. Reading the board needs no wallet at all.
@@ -64,8 +71,9 @@ wallet stack load only when they are needed.
 
 Stated plainly, because a claim you cannot audit is worth nothing:
 
-- **The oracle committee.** The design is 2-of-3 daemons on three different sports-data
-  providers. Today one key hash gates the Fact, and the Oracle panel holds it.
+- **The three daemons.** The committee is in the contract and enforced by it, but all
+  three seats currently live in one browser, so the independence the design assumes is not
+  yet real. Separating them onto three machines with three data providers is next.
 - **The market factory.** A person creates the slate; the daemon that pulls it from an
   odds feed does not exist yet.
 - **Rake.** Winners take the whole pot. The contract charges nothing.
@@ -123,7 +131,7 @@ the Oracle tab, or open the app with `?c=<address>`.
 ## Tests and checks
 
 ```bash
-cd contract && npm test      # 34 tests: resolution matrix, flooring, voids, adversarial provers
+cd contract && npm test      # 43 tests: resolution matrix, flooring, voids, quorum, disputes, adversarial provers
 cd ui && npm run check       # typecheck + the UI settlement math against the circuit's rules
 cd ui && npm run build       # production build; copies the ZK artifacts into public/zk
 ```

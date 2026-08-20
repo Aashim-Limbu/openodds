@@ -152,9 +152,23 @@ computes the proof sees the Witness.
 _Avoid_: private input, secret, private state
 
 **Oracle**:
-The party permitted to write Facts. It reports scores and can do nothing else — it
+The committee permitted to write Facts. It reports scores and can do nothing else — it
 cannot touch escrow or a Position.
 _Avoid_: admin, owner, operator, referee
+
+**Seat**:
+One of the three places on the Oracle committee, held by whoever knows that seat's
+secret. A Seat files at most one score per Event.
+_Avoid_: key, signer, node, validator
+
+**Quorum**:
+Two Seats filing the same score. Nothing settles without it.
+_Avoid_: consensus, majority, agreement
+
+**Dispute**:
+The state of an Event whose three Seats all filed different scores. It pays nobody; a
+Seat then Voids it and every Position refunds.
+_Avoid_: conflict, disagreement, error
 
 **Operator**:
 Whoever runs an Interface and publishes a Slate.
