@@ -38,9 +38,9 @@ until it is done there is no submission.
 Run in order from `cli/`:
 
 ```bash
-node --experimental-strip-types src/preview.ts snapshot demo    # ~7 min, one time
-node --experimental-strip-types src/preview.ts snapshot oracle  # ~7 min, one time
-node --experimental-strip-types src/preview.ts restore demo     # the number that matters
+node --experimental-strip-types src/preview.ts snapshot demo    # DONE — 730s, 277 kB
+node --experimental-strip-types src/preview.ts snapshot oracle  # ~12 min, still to do
+node --experimental-strip-types src/preview.ts restore demo     # DONE — 1.1s
 node --experimental-strip-types src/preview.ts deploy           # committee contract → preview
 node --experimental-strip-types src/preview.ts slate            # ~10 min of serial transactions
 node --experimental-strip-types src/preview.ts publish-demo     # → ui/public/demo-wallet.json
@@ -50,10 +50,10 @@ node --experimental-strip-types src/preview.ts publish-demo     # → ui/public/
 human names. `deploy` saves the three seat secrets to `cli/deployments/preview.json`
 — gitignored, and the only thing that can settle a market.
 
-**Unverified assumption, and everything rests on it:** that `restore()` skips
-the chain scan and a restored wallet is ready in seconds. If it is not, the
-demo wallet cannot work and the fallback is a local-stack demo plus video,
-which historically scores badly.
+**Verified 2026-08-21.** A cold sync plus dust bootstrap is 730s one time; a
+restore from the resulting 277 kB snapshot is **1.1s**, arriving with its 5000
+NIGHT and enough dust to transact. `ui/public/demo-wallet.json` is published and
+committed. The demo-wallet design works.
 
 ## Phase 1 — make it reachable (1 day)
 
