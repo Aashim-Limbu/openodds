@@ -106,6 +106,10 @@ the contract does.
   Looking it up on the indexer always returns nothing. This is not a failure.
 - **The faucet needs a captcha token**, so `POST /api/drips` only works from the
   page. A sponsor-funding service cannot lean on it.
+- **`additionalFeeOverhead` must be small on a faucet-funded wallet.** The 5e17
+  (0.5 DUST) we inherited from the local-stack example makes the dust
+  registration fee unpayable for a wallet holding ~0.02 DUST, which blocks the
+  bootstrap step entirely. Now a shared `DUST_FEE_OVERHEAD` at 0.001 DUST.
 - **Cold wallet sync is ~6.5 minutes** on preview (~133k indices). Anything much
   longer means the wallet is stuck in `waiting for funds`, not syncing.
 - `pkill -f` on a pattern that appears in the shell's own command line kills the
