@@ -27,6 +27,8 @@ const TICKET_PRICE = 100n;
 const coinFor = (tickets: bigint) => ({ nonce: rand32(), color: NATIVE, value: tickets * TICKET_PRICE });
 
 const ORACLE_SK = b(7);
+// The spike drives all three seats itself; quorum still needs two of them.
+const SEAT_SKS = [ORACLE_SK, b(8), b(9)];
 // Random ids on purpose: a 32-byte id above the BLS scalar modulus used to
 // break commitmentFor, and fixed low-byte ids hid it.
 const EVENT = rand32();
@@ -92,7 +94,7 @@ const runE1 = async () => {
   console.log(`shielded balance at start: ${bal0}`);
 
   const contract = await phase('deploy', () =>
-    deployOpenOdds(providers, createPrivateState(alice, ORACLE_SK), pureCircuits.oracleKhOf(ORACLE_SK)),
+    deployOpenOdds(providers, createPrivateState(alice, ORACLE_SK), SEAT_SKS.map((sk) => pureCircuits.oracleKhOf(sk))),
   );
   const address = contract.deployTxData.public.contractAddress;
   console.log(`contract: ${address}`);
@@ -119,7 +121,11 @@ const runE1 = async () => {
   await dumpPools(providers, address, 'after spread bets');
 
   // ONE fact settles the whole slate.
-  await phase('postScore', () => contract.callTx.postScore(EVENT, 48n, 34n).then(() => undefined));
+  await phase('postScore:seat0', () => contract.callTx.postScore(EVENT, 48n, 34n).then(() => undefined));
+  await phase('postScore:seat1', async () => {
+    await patchPrivateState(providers, { oracleSecretKey: SEAT_SKS[1] });
+    await contract.callTx.postScore(EVENT, 48n, 34n);
+  });
   await dumpPools(providers, address, 'after resolve');
 
   const before = await shieldedBalance(ctx);
@@ -175,7 +181,7 @@ const runE3 = async () => {
 
   const sk = rand32();
   const contract = await phase('deploy-e3', () =>
-    deployOpenOdds(providers, createPrivateState(sk, ORACLE_SK), pureCircuits.oracleKhOf(ORACLE_SK)),
+    deployOpenOdds(providers, createPrivateState(sk, ORACLE_SK), SEAT_SKS.map((sk) => pureCircuits.oracleKhOf(sk))),
   );
   await contract.callTx.createEvent(EVENT);
   await contract.callTx.createMarket(MKT_SPREAD, EVENT, 1n, 13n, true);

@@ -302,16 +302,18 @@ export const configureProviders = async (ctx: WalletContext, config: Config) => 
 
 export type OpenOddsProviders = Awaited<ReturnType<typeof configureProviders>>;
 
+/** Seals the three committee seats. Quorum is 2-of-3; see openodds.compact. */
 export const deployOpenOdds = async (
   providers: OpenOddsProviders,
   initialPrivateState: OpenOddsPrivateState,
-  oracleKeyHash: Uint8Array,
+  oracleKeyHashes: readonly Uint8Array[],
 ) => {
+  if (oracleKeyHashes.length !== 3) throw new Error('the committee has exactly three seats');
   const deployed = await deployContract(providers as any, {
     compiledContract: openoddsCompiledContract,
     privateStateId: OpenOddsPrivateStateId,
     initialPrivateState,
-    args: [oracleKeyHash],
+    args: [...oracleKeyHashes],
   } as any);
   return deployed;
 };

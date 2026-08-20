@@ -6,3 +6,4 @@ logs/
 ui/dist/
 .preview-wallets.json
 snapshots/
+deployments/

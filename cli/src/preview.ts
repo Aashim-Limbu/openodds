@@ -25,7 +25,17 @@ import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstra
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 
 import { PreviewConfig, currentDir, type Config } from './config.ts';
-import { buildWalletAndWaitForFunds } from './api.ts';
+import {
+  buildWalletAndWaitForFunds,
+  configureProviders,
+  createPrivateState,
+  deployOpenOdds,
+  joinOpenOdds,
+  patchPrivateState,
+  pureCircuits,
+} from './api.ts';
+
+const rand32 = () => crypto.getRandomValues(new Uint8Array(32));
 
 export const ROLES = ['oracle', 'seeder', 'demo'] as const;
 export type Role = (typeof ROLES)[number];
@@ -120,6 +130,31 @@ const buildRestored = async (cfg: Config, seed: string, snap: WalletSnapshot) =>
   return { wallet, shieldedSecretKeys, dustSecretKey, unshieldedKeystore: keystore };
 };
 
+/** A deployment we control: the contract plus the seat secrets that can settle it. */
+export interface Deployment {
+  address: string;
+  seats: string[];
+  deployedAt: string;
+}
+
+const deploymentPath = () => path.resolve(currentDir, '..', 'deployments', 'preview.json');
+
+export const loadDeployment = (): Deployment | null => {
+  const f = deploymentPath();
+  return fs.existsSync(f) ? (JSON.parse(fs.readFileSync(f, 'utf8')) as Deployment) : null;
+};
+
+/** Restore from a snapshot when we have one; pay the cold cost when we do not. */
+export const openWallet = async (role: Role) => {
+  const snap = loadSnapshot(role);
+  if (snap) {
+    console.log(`  ${role}: restoring from snapshot (${snap.takenAt})`);
+    return buildRestored(config, seedFor(role), snap);
+  }
+  console.log(`  ${role}: no snapshot — cold sync, this takes minutes`);
+  return buildWalletAndWaitForFunds(config, seedFor(role));
+};
+
 const cmd = process.argv[2] ?? 'wallets';
 const config = new PreviewConfig();
 
@@ -187,6 +222,110 @@ if (cmd === 'wallets') {
   console.log(`  NIGHT (unshielded) ${state.unshielded.balances[unshieldedToken().raw] ?? 0n}`);
   console.log(`  NIGHT (shielded)   ${state.shielded.balances[shieldedToken().raw] ?? 0n}`);
   console.log(`  DUST               ${state.dust.balance(new Date())}`);
+  process.exit(0);
+} else if (cmd === 'deploy') {
+  const t0 = Date.now();
+  const ctx = await openWallet('oracle');
+  const providers = await configureProviders(ctx, config);
+  // Three seats, generated here and kept here. In production each of these
+  // lives on a separate daemon watching a different data provider.
+  const seats = [rand32(), rand32(), rand32()];
+  console.log('deploying with a 2-of-3 committee…');
+  const deployed: any = await deployOpenOdds(
+    providers,
+    createPrivateState(rand32(), seats[0]),
+    seats.map((sk) => pureCircuits.oracleKhOf(sk)),
+  );
+  const address = deployed.deployTxData.public.contractAddress as string;
+  const record: Deployment = {
+    address,
+    seats: seats.map((sk) => Buffer.from(sk).toString('hex')),
+    deployedAt: new Date().toISOString(),
+  };
+  fs.mkdirSync(path.dirname(deploymentPath()), { recursive: true });
+  fs.writeFileSync(deploymentPath(), `${JSON.stringify(record, null, 2)}\n`);
+  console.log(`\ndeployed in ${((Date.now() - t0) / 1000).toFixed(0)}s`);
+  console.log(`  address ${address}`);
+  console.log(`  explorer https://preview.midnightexplorer.com/`);
+  console.log(`  seats saved to ${deploymentPath()} (gitignored)`);
+  process.exit(0);
+} else if (cmd === 'slate') {
+  // A board that is empty when a judge arrives is a board that failed. Seed a
+  // real one: an event already settled so the whole lifecycle is visible on
+  // arrival, and two open ones with pools deep enough that the odds mean
+  // something. Every transaction is serial per wallet — this takes ~10 minutes.
+  const dep = loadDeployment();
+  if (!dep) throw new Error('nothing deployed — run: node src/preview.ts deploy');
+
+  const EVENTS = [
+    { home: 'Arsenal', away: 'Chelsea', league: 'Premier League', settle: [2, 1] as [number, number] },
+    { home: 'Spurs', away: 'Aston Villa', league: 'Premier League', settle: null },
+    { home: 'Liverpool', away: 'Everton', league: 'Premier League', settle: null },
+  ];
+
+  const oracleCtx = await openWallet('oracle');
+  const oracleProviders = await configureProviders(oracleCtx, config);
+  const contract: any = await joinOpenOdds(oracleProviders, dep.address);
+
+  const meta: Record<string, { home: string; away: string; league: string }> = {};
+  const created: { eventId: Uint8Array; markets: Uint8Array[]; settle: [number, number] | null }[] = [];
+
+  for (const e of EVENTS) {
+    const eventId = rand32();
+    console.log(`\ncreating ${e.home} v ${e.away}`);
+    await contract.callTx.createEvent(eventId);
+    const moneyline = rand32();
+    const spread = rand32();
+    await contract.callTx.createMarket(moneyline, eventId, 0n, 0n, true);
+    await contract.callTx.createMarket(spread, eventId, 1n, 3n, true); // favourite -1.5
+    meta[Buffer.from(eventId).toString('hex')] = { home: e.home, away: e.away, league: e.league };
+    created.push({ eventId, markets: [moneyline, spread], settle: e.settle });
+  }
+
+  // Bets from a separate wallet: the anonymity set should not be one person.
+  const seederCtx = await openWallet('seeder');
+  const seederProviders = await configureProviders(seederCtx, config);
+  const seederContract: any = await joinOpenOdds(seederProviders, dep.address);
+  const BETS: [number, number, number][] = [
+    [0, 0, 3], [0, 1, 7], [1, 0, 5], [1, 1, 2], [2, 0, 4], [2, 1, 6],
+  ];
+  for (const [eventIdx, outcome, tickets] of BETS) {
+    const marketId = created[eventIdx].markets[eventIdx === 0 ? 0 : 1];
+    console.log(`  bet ${tickets} on outcome ${outcome}`);
+    await patchPrivateState(seederProviders, {
+      secretKey: rand32(),
+      marketId,
+      outcome: BigInt(outcome),
+      tickets: BigInt(tickets),
+    });
+    await seederContract.callTx.placeBet(
+      { nonce: rand32(), color: new Uint8Array(32), value: BigInt(tickets) * 100n },
+      marketId,
+      BigInt(outcome),
+      BigInt(tickets),
+    );
+  }
+
+  // Settle the first event with a real quorum: two seats, same score.
+  for (const c of created) {
+    if (!c.settle) continue;
+    const [h, a] = c.settle;
+    console.log(`\nsettling ${h}–${a} with two seats`);
+    for (const seat of dep.seats.slice(0, 2)) {
+      await patchPrivateState(oracleProviders, {
+        oracleSecretKey: Uint8Array.from(Buffer.from(seat, 'hex')),
+      });
+      await contract.callTx.postScore(c.eventId, BigInt(h * 2), BigInt(a * 2));
+    }
+  }
+
+  const out = path.resolve(currentDir, '..', '..', 'ui', 'public', 'slate.json');
+  fs.mkdirSync(path.dirname(out), { recursive: true });
+  fs.writeFileSync(
+    out,
+    `${JSON.stringify({ contract: dep.address, network: 'preview', events: meta }, null, 2)}\n`,
+  );
+  console.log(`\nslate published → ${out}`);
   process.exit(0);
 } else if (cmd === 'publish-demo') {
   // Ship the demo seed and its snapshot as a static asset. The seed is public
