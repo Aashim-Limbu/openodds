@@ -12,7 +12,6 @@ import path from 'node:path';
 import { Buffer } from 'node:buffer';
 import { HDWallet, Roles } from '@midnight-ntwrk/wallet-sdk-hd';
 import { createKeystore } from '@midnight-ntwrk/wallet-sdk-unshielded-wallet';
-import { UnshieldedAddress } from '@midnight-ntwrk/wallet-sdk-address-format';
 import { setNetworkId, getNetworkId } from '@midnight-ntwrk/midnight-js/network-id';
 import { unshieldedToken, shieldedToken } from '@midnight-ntwrk/ledger-v8';
 import * as Rx from 'rxjs';
@@ -60,7 +59,13 @@ export const seedFor = (role: Role): string => {
   return wallets[role];
 };
 
-/** The bech32m unshielded address the faucet wants. */
+/**
+ * The bech32m unshielded address the faucet wants — and, more to the point, the
+ * one the wallet actually watches. The SDK derives it; do not hand-roll it. An
+ * address is a hash of the public key, not the public key, and encoding the
+ * latter produces a valid-looking address that nobody controls. Cost of
+ * learning that: 15,000 tNIGHT and an afternoon.
+ */
 export const faucetAddress = (seed: string): string => {
   const hd = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
   if (hd.type !== 'seedOk') throw new Error('bad seed');
@@ -71,8 +76,7 @@ export const faucetAddress = (seed: string): string => {
   if (derived.type !== 'keysDerived') throw new Error('bad derivation');
   hd.hdWallet.clear();
   const keystore = createKeystore(derived.keys[Roles.NightExternal], getNetworkId());
-  const hex = keystore.getPublicKey() as unknown as string;
-  return String(UnshieldedAddress.codec.encode(getNetworkId(), new UnshieldedAddress(Buffer.from(hex, 'hex'))));
+  return PublicKey.fromKeyStore(keystore).address;
 };
 
 /**

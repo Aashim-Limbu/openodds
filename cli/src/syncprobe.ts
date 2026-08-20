@@ -14,7 +14,7 @@ import { PreviewConfig } from './config.ts';
 import { seedFor } from './preview.ts';
 
 const config = new PreviewConfig();
-const seed = seedFor('oracle');
+const seed = seedFor('demo');
 const hd = HDWallet.fromSeed(Buffer.from(seed, 'hex'));
 if (hd.type !== 'seedOk') throw new Error('bad seed');
 const d = hd.hdWallet.selectAccount(0).selectRoles([Roles.Zswap, Roles.NightExternal, Roles.Dust]).deriveKeysAt(0);
@@ -48,5 +48,9 @@ wallet.state().pipe(Rx.throttleTime(10_000, undefined, { leading: true, trailing
   console.log(`  shielded  : ${describe(s.shielded)}`);
   console.log(`  unshielded: ${describe(s.unshielded)}`);
   console.log(`  dust      : ${describe(s.dust)}`);
+  // The question that matters: does it see the money, and under which key?
+  console.log(`  BAL unshielded: ${j(s.unshielded.balances)}  coins=${s.unshielded.availableCoins?.length ?? '?'}`);
+  console.log(`  BAL shielded  : ${j(s.shielded.balances)}`);
+  console.log(`  DUST balance  : ${s.dust.balance(new Date())}`);
 });
-setTimeout(() => process.exit(0), 120_000);
+setTimeout(() => process.exit(0), 900_000);
