@@ -37,7 +37,12 @@ const namesOf = (meta: EventMeta | undefined, event: ChainEvent): EventNames =>
 
 function EventStatus({ event }: { event: ChainEvent }) {
   if (event.status === 'VOID') return <Badge variant="destructive">Void · refunds</Badge>;
+  if (event.status === 'DISPUTED')
+    return <Badge variant="destructive">Disputed · seats disagree</Badge>;
   if (event.status === 'FINAL') return <Badge variant="secondary">Final {scoreText(event)}</Badge>;
+  // A partly-filed event is the committee at work; show it rather than hide it.
+  const filed = event.reports.filter((r) => r.filed).length;
+  if (filed > 0) return <Badge variant="outline">{filed} of 3 seats reported</Badge>;
   return <Badge>Open</Badge>;
 }
 

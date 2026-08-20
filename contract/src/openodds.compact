@@ -25,7 +25,23 @@ import CompactStandardLibrary;
 export enum EventStatus {
   PENDING,
   FINAL,
-  VOID
+  VOID,
+  DISPUTED
+}
+
+// One committee seat's observation of an event.
+export struct Report {
+  h2: Uint<16>,
+  a2: Uint<16>,
+  filed: Boolean
+}
+
+// The three seats. A fixed-size struct, not a list: N=3 is sealed into the
+// design precisely so nothing here ever iterates.
+export struct ReportSet {
+  r0: Report,
+  r1: Report,
+  r2: Report
 }
 
 export struct MarketParams {
@@ -46,7 +62,16 @@ export struct EventFact {
 }
 
 // ---------- config ----------
-export sealed ledger oracleKeyHash: Bytes<32>;
+// A 2-of-3 committee: three daemons, three different sports-data providers,
+// three key hashes fixed at deploy. There are no signature-verification
+// circuits on this platform, so a seat proves itself by knowing the preimage
+// of its hash (the bboard idiom).
+export sealed ledger oracleKeyHash0: Bytes<32>;
+export sealed ledger oracleKeyHash1: Bytes<32>;
+export sealed ledger oracleKeyHash2: Bytes<32>;
+
+// eventId -> what each seat has reported so far.
+export ledger reports: Map<Bytes<32>, ReportSet>;
 
 // ---------- markets and events ----------
 export ledger markets: Map<Bytes<32>, MarketParams>;
@@ -67,8 +92,10 @@ export ledger nullifiers: Set<Bytes<32>>;
 export ledger treasury: QualifiedShieldedCoinInfo;
 export ledger treasuryFunded: Boolean;
 
-constructor(initOracleKeyHash: Bytes<32>) {
-  oracleKeyHash = disclose(initOracleKeyHash);
+constructor(kh0: Bytes<32>, kh1: Bytes<32>, kh2: Bytes<32>) {
+  oracleKeyHash0 = disclose(kh0);
+  oracleKeyHash1 = disclose(kh1);
+  oracleKeyHash2 = disclose(kh2);
 }
 
 // ---------- constants ----------
@@ -120,11 +147,37 @@ export circuit poolKey(marketId: Bytes<32>, outcome: Uint<8>): Bytes<32> {
 }
 
 // ---------- internal helpers ----------
-circuit assertOracle(): [] {
+// Which committee seat the caller holds. Disclosing the seat is deliberate:
+// the settlement trail is meant to be publicly attributable, even though the
+// bettors are not.
+circuit oracleSlot(): Uint<8> {
   const kh = persistentHash<Vector<2, Bytes<32>>>(
     [pad(32, "openodds:oracle:"), oracleSecretKey()]
   );
-  assert(kh == oracleKeyHash, "not the oracle");
+  // The seat is disclosed on purpose: which daemon filed a score is public
+  // accountability, and it says nothing about any bettor.
+  if (disclose(kh == oracleKeyHash0)) { return 0; }
+  if (disclose(kh == oracleKeyHash1)) { return 1; }
+  assert(disclose(kh == oracleKeyHash2), "not an oracle");
+  return 2;
+}
+
+circuit assertOracle(): [] {
+  const slot = oracleSlot();
+  assert(slot <= 2, "not an oracle");
+}
+
+circuit reportsFor(eventId: Bytes<32>): ReportSet {
+  const empty = Report { h2: 0, a2: 0, filed: false };
+  if (!reports.member(disclose(eventId))) {
+    return ReportSet { r0: empty, r1: empty, r2: empty };
+  }
+  return reports.lookup(disclose(eventId));
+}
+
+// Two seats that filed the same score agree. Comparisons only, all unrolled.
+circuit agree(a: Report, b: Report): Boolean {
+  return a.filed && b.filed && a.h2 == b.h2 && a.a2 == b.a2;
 }
 
 circuit poolOf(marketId: Bytes<32>, outcome: Uint<8>): Uint<64> {
@@ -192,21 +245,56 @@ export circuit createMarket(
   );
 }
 
-// One fact settles every market on the event.
+// One fact settles every market on the event — but only once two of the three
+// seats have filed the same score. A seat cannot file twice, and three seats
+// that disagree leave the event DISPUTED, which refunds rather than guesses.
 export circuit postScore(eventId: Bytes<32>, h2: Uint<16>, a2: Uint<16>): [] {
-  assertOracle();
+  const slot = oracleSlot();
   assert(events.member(disclose(eventId)), "no such event");
   const f = events.lookup(disclose(eventId));
   assert(f.status == EventStatus.PENDING, "already resolved");
-  events.insert(
-    disclose(eventId),
-    EventFact {
-      homeScore2: disclose(h2),
-      awayScore2: disclose(a2),
-      status: EventStatus.FINAL,
-      exists: true
+
+  const prev = reportsFor(eventId);
+  assert(!(slot == 0 && prev.r0.filed), "seat already reported");
+  assert(!(slot == 1 && prev.r1.filed), "seat already reported");
+  assert(!(slot == 2 && prev.r2.filed), "seat already reported");
+
+  const mine = Report { h2: disclose(h2), a2: disclose(a2), filed: true };
+  const next = ReportSet {
+    r0: slot == 0 ? mine : prev.r0,
+    r1: slot == 1 ? mine : prev.r1,
+    r2: slot == 2 ? mine : prev.r2
+  };
+  reports.insert(disclose(eventId), next);
+
+  const a01 = agree(next.r0, next.r1);
+  const a02 = agree(next.r0, next.r2);
+  const a12 = agree(next.r1, next.r2);
+
+  if (a01 || a02 || a12) {
+    const quorum = a01 ? next.r0 : (a02 ? next.r0 : next.r1);
+    events.insert(
+      disclose(eventId),
+      EventFact {
+        homeScore2: quorum.h2,
+        awayScore2: quorum.a2,
+        status: EventStatus.FINAL,
+        exists: true
+      }
+    );
+  } else {
+    if (next.r0.filed && next.r1.filed && next.r2.filed) {
+      events.insert(
+        disclose(eventId),
+        EventFact {
+          homeScore2: f.homeScore2,
+          awayScore2: f.awayScore2,
+          status: EventStatus.DISPUTED,
+          exists: true
+        }
+      );
     }
-  );
+  }
 }
 
 // Postponed/abandoned: every market on the event refunds.
@@ -214,7 +302,12 @@ export circuit voidEvent(eventId: Bytes<32>): [] {
   assertOracle();
   assert(events.member(disclose(eventId)), "no such event");
   const f = events.lookup(disclose(eventId));
-  assert(f.status == EventStatus.PENDING, "already resolved");
+  // A disputed event is the other way out: the committee could not agree, so
+  // any seat may void it and refund every position.
+  assert(
+    f.status == EventStatus.PENDING || f.status == EventStatus.DISPUTED,
+    "already resolved"
+  );
   events.insert(
     disclose(eventId),
     EventFact {
@@ -282,7 +375,7 @@ export circuit claim(): Uint<64> {
 
   const m = markets.lookup(disclose(marketId));
   const f = events.lookup(m.eventId);
-  assert(f.status != EventStatus.PENDING, "event not resolved");
+  assert(f.status == EventStatus.FINAL || f.status == EventStatus.VOID, "event not resolved");
 
   // Membership: this position was really placed.
   const c = commitmentFor(sk, marketId, outcome, tickets);

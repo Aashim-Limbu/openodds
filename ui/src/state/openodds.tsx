@@ -111,7 +111,8 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
   const [connectLog, setConnectLog] = useState<string[]>([]);
   const [busy, setBusy] = useState<Busy | null>(null);
   const [activity, setActivity] = useState<Entry[]>([]);
-  const [oracleKh, setOracleKh] = useState<string | null>(null);
+  /** hashes of the seats this browser holds, for matching against the board */
+  const [oracleKh, setOracleKh] = useState<string[]>([]);
 
   const session = useRef<Chain.Session | null>(null);
   /** Set once the write half of the app has been fetched (on connect). */
@@ -208,8 +209,9 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
       const contract = address ? await mod.joinMarket(providers, address) : null;
       session.current = { providers, contract, address, coinPk };
 
-      const oracleSk = address ? await mod.getOracleSecretKey(providers, address) : null;
-      setOracleKh(oracleSk ? await chain.oracleKeyHashOf(oracleSk) : null);
+      setOracleKh(
+        await Promise.all(state.settings.oracleSeats.map((sk) => chain.oracleKeyHashOf(chain.unhex(sk)))),
+      );
 
       stopBalances.current?.();
       stopBalances.current = mod.watchBalances(ctx, (b) => setWallet({ coinPk, ...b }));
@@ -234,13 +236,16 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
       try {
         s.contract = address ? await mod.joinMarket(s.providers, address) : null;
         s.address = address;
-        const sk = address ? await mod.getOracleSecretKey(s.providers, address) : null;
-        setOracleKh(sk ? await chain.oracleKeyHashOf(sk) : null);
+        setOracleKh(
+          await Promise.all(
+            state.settings.oracleSeats.map((sk) => chain.oracleKeyHashOf(chain.unhex(sk))),
+          ),
+        );
       } catch (e) {
         note('error', `could not join ${address}: ${message(e)}`);
       }
     })();
-  }, [address, note]);
+  }, [address, note, state.settings.oracleSeats]);
 
   // ---- writes ---------------------------------------------------------------
   const need = () => {
@@ -293,15 +298,21 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
     const mod = chainMod.current;
     if (!s || !mod) throw new Error('connect a wallet first');
     await run('deploy contract', async () => {
-      const oracleSk = chain.rand32();
-      const deployed: any = await mod.deployMarket(s.providers, oracleSk, chain.rand32());
+      // Three seats sealed at deploy. Running all three from one browser is the
+      // demo; in production each secret lives on a separate daemon.
+      const seats = [chain.rand32(), chain.rand32(), chain.rand32()];
+      const deployed: any = await mod.deployMarket(s.providers, seats, chain.rand32());
       const addr = deployed.deployTxData.public.contractAddress as string;
       s.contract = deployed;
       s.address = addr;
-      setOracleKh(await chain.oracleKeyHashOf(oracleSk));
+      setOracleKh(await Promise.all(seats.map((sk) => chain.oracleKeyHashOf(sk))));
       setState((prev) => ({
         ...prev,
-        settings: { ...prev.settings, contract: addr },
+        settings: {
+          ...prev.settings,
+          contract: addr,
+          oracleSeats: seats.map((sk) => chain.hex(sk)),
+        },
         slate: { ...prev.slate, contract: addr },
       }));
     });
@@ -340,18 +351,25 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
   const postScore = useCallback(
     async (eventId: string, home: number, away: number) => {
       const { s, mod } = need();
-      // scores are stored in half-points, same encoding as the lines
-      await run(`post score ${home}–${away}`, () =>
-        mod.oracleTx.postScore(s, chain.unhex(eventId), home * 2, away * 2),
-      );
+      const seats = state.settings.oracleSeats;
+      if (seats.length < 2) throw new Error('need at least two committee seats to reach quorum');
+      // Quorum is 2-of-3: two seats must file the same score, so this is two
+      // transactions. Scores are half-points, same encoding as the lines.
+      for (const [index, seat] of seats.slice(0, 2).entries()) {
+        await run(`seat ${index + 1} files ${home}–${away}`, () =>
+          mod.oracleTx.postScore(s, chain.unhex(seat), chain.unhex(eventId), home * 2, away * 2),
+        );
+      }
     },
-    [run],
+    [run, state.settings.oracleSeats],
   );
 
   const voidEvent = useCallback(
     async (eventId: string) => {
       const { s, mod } = need();
-      await run('void event', () => mod.oracleTx.voidEvent(s, chain.unhex(eventId)));
+      const seat = state.settings.oracleSeats[0];
+      if (!seat) throw new Error('no committee seat held');
+      await run('void event', () => mod.oracleTx.voidEvent(s, chain.unhex(seat), chain.unhex(eventId)));
     },
     [run],
   );
@@ -496,7 +514,8 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
     connectError,
     connectLog,
     connect,
-    isOracle: !!oracleKh && !!board && oracleKh === board.oracleKeyHash,
+    // we hold a seat if any of our seat hashes is sealed into this contract
+    isOracle: !!board && board.oracleKeyHashes.some((h) => oracleKh.includes(h)),
     busy,
     activity,
     deploy,

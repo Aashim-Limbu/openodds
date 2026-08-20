@@ -38,6 +38,11 @@ export interface Slate {
 export interface Settings extends ChainConfig {
   seed: string;
   contract: string;
+  /**
+   * The committee seat secrets this browser holds, hex, one per seat. An
+   * operator running all three daemons holds three; a single daemon holds one.
+   */
+  oracleSeats: string[];
 }
 
 export interface Persisted {
@@ -50,6 +55,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ...LOCAL_STACK,
   seed: '0000000000000000000000000000000000000000000000000000000000000001',
   contract: '',
+  oracleSeats: [],
 };
 
 const EMPTY: Persisted = { settings: DEFAULT_SETTINGS, positions: [], slate: { events: {} } };

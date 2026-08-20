@@ -26,5 +26,24 @@ export class StandaloneConfig implements Config {
   }
 }
 
+/**
+ * Public preview testnet. Every endpoint here was probed live on 2026-08-15:
+ * proof server v8.0.3, rpc healthy, indexer serving both v3 and v4.
+ * Faucet: https://midnight-tmnight-preview.nethermind.dev/ — issues tNIGHT,
+ * which must then be delegated to generate the tDUST that pays fees.
+ */
+export class PreviewConfig implements Config {
+  indexer = 'https://indexer.preview.midnight.network/api/v3/graphql';
+  indexerWS = 'wss://indexer.preview.midnight.network/api/v3/graphql/ws';
+  node = 'https://rpc.preview.midnight.network';
+  proofServer = 'https://proof-server.preview.midnight.network';
+  constructor() {
+    setNetworkId('preview');
+  }
+}
+
+export const configFor = (net: string): Config =>
+  net === 'preview' ? new PreviewConfig() : new StandaloneConfig();
+
 // Pre-funded genesis wallet on the standalone dev node.
 export const GENESIS_SEED = '0000000000000000000000000000000000000000000000000000000000000001';

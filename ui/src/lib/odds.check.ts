@@ -27,11 +27,14 @@ const market = (over: Partial<ChainMarket> = {}): ChainMarket => ({
   ...over,
 });
 
+const noReport = { filed: false, homeScore2: 0, awayScore2: 0 };
+
 const fact = (homeScore2: number, awayScore2: number, status: ChainEvent['status'] = 'FINAL'): ChainEvent => ({
   id: 'bb',
   homeScore2,
   awayScore2,
   status,
+  reports: [noReport, noReport, noReport],
 });
 
 // ---- resultOf mirrors the circuit -----------------------------------------

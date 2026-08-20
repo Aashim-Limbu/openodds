@@ -225,12 +225,17 @@ export const configureProviders = async (ctx: WalletContext) => {
 
 export type OpenOddsProviders = Awaited<ReturnType<typeof configureProviders>>;
 
-export const deployMarket = (providers: OpenOddsProviders, oracleSk: Uint8Array, betSecret: Uint8Array) =>
+/** Seals the three committee seats at deploy. Seat 0 is the deployer's own. */
+export const deployMarket = (
+  providers: OpenOddsProviders,
+  seatSecrets: Uint8Array[],
+  betSecret: Uint8Array,
+) =>
   deployContract(providers as any, {
     compiledContract: openoddsCompiledContract,
     privateStateId: OpenOddsPrivateStateId,
-    initialPrivateState: createPrivateState(betSecret, oracleSk),
-    args: [pureCircuits.oracleKhOf(oracleSk)],
+    initialPrivateState: createPrivateState(betSecret, seatSecrets[0]),
+    args: seatSecrets.map((sk) => pureCircuits.oracleKhOf(sk)),
   } as any);
 
 /**
@@ -312,12 +317,17 @@ export const oracleTx = {
         ),
       ),
     ),
-  postScore: (s: Session, eventId: Uint8Array, home2: number, away2: number) =>
-    serial(async () =>
-      txResult(await s.contract.callTx.postScore(eventId, BigInt(home2), BigInt(away2))),
-    ),
-  voidEvent: (s: Session, eventId: Uint8Array) =>
-    serial(async () => txResult(await s.contract.callTx.voidEvent(eventId))),
+  /** File one seat's observation. Quorum is 2-of-3, so this is called twice. */
+  postScore: (s: Session, seatSecret: Uint8Array, eventId: Uint8Array, home2: number, away2: number) =>
+    serial(async () => {
+      await patchPrivateState(s.providers, s.address, { oracleSecretKey: seatSecret });
+      return txResult(await s.contract.callTx.postScore(eventId, BigInt(home2), BigInt(away2)));
+    }),
+  voidEvent: (s: Session, seatSecret: Uint8Array, eventId: Uint8Array) =>
+    serial(async () => {
+      await patchPrivateState(s.providers, s.address, { oracleSecretKey: seatSecret });
+      return txResult(await s.contract.callTx.voidEvent(eventId));
+    }),
 };
 
 export const placeBet = (

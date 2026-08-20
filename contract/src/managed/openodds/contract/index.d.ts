@@ -1,6 +1,10 @@
 import type * as __compactRuntime from '@midnight-ntwrk/compact-runtime';
 
-export enum EventStatus { PENDING = 0, FINAL = 1, VOID = 2 }
+export enum EventStatus { PENDING = 0, FINAL = 1, VOID = 2, DISPUTED = 3 }
+
+export type Report = { h2: bigint; a2: bigint; filed: boolean };
+
+export type ReportSet = { r0: Report; r1: Report; r2: Report };
 
 export type MarketParams = { eventId: Uint8Array;
                              marketType: bigint;
@@ -123,7 +127,16 @@ export type Circuits<PS> = {
 }
 
 export type Ledger = {
-  readonly oracleKeyHash: Uint8Array;
+  readonly oracleKeyHash0: Uint8Array;
+  readonly oracleKeyHash1: Uint8Array;
+  readonly oracleKeyHash2: Uint8Array;
+  reports: {
+    isEmpty(): boolean;
+    size(): bigint;
+    member(key_0: Uint8Array): boolean;
+    lookup(key_0: Uint8Array): ReportSet;
+    [Symbol.iterator](): Iterator<[Uint8Array, ReportSet]>
+  };
   markets: {
     isEmpty(): boolean;
     size(): bigint;
@@ -179,7 +192,9 @@ export declare class Contract<PS = any, W extends Witnesses<PS> = Witnesses<PS>>
   provableCircuits: ProvableCircuits<PS>;
   constructor(witnesses: W);
   initialState(context: __compactRuntime.ConstructorContext<PS>,
-               initOracleKeyHash_0: Uint8Array): __compactRuntime.ConstructorResult<PS>;
+               kh0_0: Uint8Array,
+               kh1_0: Uint8Array,
+               kh2_0: Uint8Array): __compactRuntime.ConstructorResult<PS>;
 }
 
 export declare function ledger(state: __compactRuntime.StateValue | __compactRuntime.ChargedState): Ledger;

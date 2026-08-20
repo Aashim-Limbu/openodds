@@ -9,8 +9,11 @@ import { createPrivateState, type OpenOddsPrivateState } from "../witnesses.js";
 
 const bytes = (fill: number): Uint8Array => new Uint8Array(32).fill(fill);
 
-const ORACLE_SK = bytes(0xaa);
-const ORACLE_KH = pureCircuits.oracleKhOf(ORACLE_SK);
+// Three seats on the committee, three different data providers in production.
+const SEATS = [bytes(0xaa), bytes(0xab), bytes(0xac)];
+const ORACLE_KHS = SEATS.map((sk) => pureCircuits.oracleKhOf(sk));
+const ORACLE_SK = SEATS[0];
+const OUTSIDER_SK = bytes(0xff);
 
 const EVENT = bytes(0xe0);
 const MKT = bytes(0x10);
@@ -21,7 +24,7 @@ const bob = (): OpenOddsPrivateState => createPrivateState(bytes(2));
 
 /** Market with one event, ready for bets. Oracle is the current user. */
 const marketWith = (marketType: bigint, halfLine: bigint, favIsHome = true) => {
-  const sim = new OpenOddsSimulator(oracle(), ORACLE_KH);
+  const sim = new OpenOddsSimulator(oracle(), ORACLE_KHS, SEATS);
   sim.createEvent(EVENT);
   sim.createMarket({ marketId: MKT, eventId: EVENT, marketType, halfLine, favIsHome });
   return sim;
@@ -51,13 +54,13 @@ const resolveAs = (sim: OpenOddsSimulator, h2: bigint, a2: bigint) => {
 
 describe("market and event setup", () => {
   it("requires the oracle key", () => {
-    const sim = new OpenOddsSimulator(oracle(), ORACLE_KH);
+    const sim = new OpenOddsSimulator(oracle(), ORACLE_KHS, SEATS);
     sim.switchUser(alice()); // no oracle secret
-    expect(() => sim.createEvent(EVENT)).toThrow(/not the oracle/);
+    expect(() => sim.createEvent(EVENT)).toThrow(/not an oracle/);
   });
 
   it("rejects a market on an unknown event", () => {
-    const sim = new OpenOddsSimulator(oracle(), ORACLE_KH);
+    const sim = new OpenOddsSimulator(oracle(), ORACLE_KHS, SEATS);
     expect(() =>
       sim.createMarket({
         marketId: MKT,
@@ -84,7 +87,7 @@ describe("market and event setup", () => {
   });
 
   it("rejects an unknown market type", () => {
-    const sim = new OpenOddsSimulator(oracle(), ORACLE_KH);
+    const sim = new OpenOddsSimulator(oracle(), ORACLE_KHS, SEATS);
     sim.createEvent(EVENT);
     expect(() =>
       sim.createMarket({
@@ -353,7 +356,7 @@ describe("id encoding", () => {
     const hiMarket = new Uint8Array(32).fill(0xff);
     hiMarket[31] = 0xfe; // distinct from the event id
 
-    const sim = new OpenOddsSimulator(oracle(), ORACLE_KH);
+    const sim = new OpenOddsSimulator(oracle(), ORACLE_KHS, SEATS);
     sim.createEvent(hiEvent);
     sim.createMarket({
       marketId: hiMarket,
@@ -420,5 +423,90 @@ describe("stake accounting", () => {
     sim.placeBet(MKT, 1n, 7n);
     expect(sim.getLedger().treasury.value).toBe(10n * TICKET_PRICE);
     expect(sim.getLedger().treasuryFunded).toBe(true);
+  });
+});
+
+describe("2-of-3 oracle committee", () => {
+  const committee = () => {
+    const sim = marketWith(0n, 0n); // moneyline, so the score alone decides
+    sim.switchUser(oracle());
+    return sim;
+  };
+
+  it("one seat is not enough to settle", () => {
+    const sim = committee();
+    const l = sim.report(0, EVENT, 48n, 34n);
+    expect(l.events.lookup(EVENT).status).toBe(EventStatus.PENDING);
+  });
+
+  it("two agreeing seats settle the event at that score", () => {
+    const sim = committee();
+    sim.report(0, EVENT, 48n, 34n);
+    const l = sim.report(1, EVENT, 48n, 34n);
+    expect(l.events.lookup(EVENT).status).toBe(EventStatus.FINAL);
+    expect(l.events.lookup(EVENT).homeScore2).toBe(48n);
+    expect(l.events.lookup(EVENT).awayScore2).toBe(34n);
+  });
+
+  it("quorum is any two seats, not just the first two", () => {
+    const sim = committee();
+    sim.report(1, EVENT, 20n, 20n);
+    const l = sim.report(2, EVENT, 20n, 20n);
+    expect(l.events.lookup(EVENT).status).toBe(EventStatus.FINAL);
+    expect(l.events.lookup(EVENT).homeScore2).toBe(20n);
+  });
+
+  it("a seat cannot file twice", () => {
+    const sim = committee();
+    sim.report(0, EVENT, 48n, 34n);
+    expect(() => sim.report(0, EVENT, 48n, 34n)).toThrow(/seat already reported/);
+  });
+
+  it("an outsider cannot file at all", () => {
+    const sim = committee();
+    sim.patchUser({ oracleSecretKey: OUTSIDER_SK });
+    expect(() => sim.report(-1, EVENT, 48n, 34n)).toThrow(/not an oracle/);
+  });
+
+  it("a disagreeing seat does not settle, and the third can still form quorum", () => {
+    const sim = committee();
+    sim.report(0, EVENT, 48n, 34n);
+    const afterDisagreement = sim.report(1, EVENT, 20n, 21n);
+    expect(afterDisagreement.events.lookup(EVENT).status).toBe(EventStatus.PENDING);
+    const l = sim.report(2, EVENT, 48n, 34n); // agrees with seat 0
+    expect(l.events.lookup(EVENT).status).toBe(EventStatus.FINAL);
+    expect(l.events.lookup(EVENT).homeScore2).toBe(48n);
+  });
+
+  it("three-way disagreement disputes the event instead of guessing", () => {
+    const sim = committee();
+    sim.report(0, EVENT, 48n, 34n);
+    sim.report(1, EVENT, 20n, 21n);
+    const l = sim.report(2, EVENT, 7n, 7n);
+    expect(l.events.lookup(EVENT).status).toBe(EventStatus.DISPUTED);
+  });
+
+  it("a disputed event is not claimable until it is voided", () => {
+    const sim = marketWith(0n, 0n);
+    const { alicePS } = twoBettors(sim, 0n, 3n, 7n);
+    sim.switchUser(oracle());
+    sim.report(0, EVENT, 48n, 34n);
+    sim.report(1, EVENT, 20n, 21n);
+    sim.report(2, EVENT, 7n, 7n);
+
+    sim.switchUser(alicePS);
+    expect(() => sim.claim()).toThrow(/event not resolved/);
+
+    sim.switchUser(oracle());
+    sim.voidEvent(EVENT);
+    sim.switchUser(alicePS);
+    expect(sim.claim()).toBe(3n); // stake back, not a payout
+  });
+
+  it("refuses a late report once quorum has settled the event", () => {
+    const sim = committee();
+    sim.report(0, EVENT, 48n, 34n);
+    sim.report(1, EVENT, 48n, 34n);
+    expect(() => sim.report(2, EVENT, 48n, 34n)).toThrow(/already resolved/);
   });
 });

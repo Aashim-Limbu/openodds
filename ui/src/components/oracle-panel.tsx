@@ -92,11 +92,11 @@ export function OraclePanel() {
         <AlertTitle>This panel stands in for the oracle committee</AlertTitle>
         <AlertDescription>
           <p>
-            In production, resolution is a 2-of-3 committee: three daemons on three different
-            sports-data providers, each posting the score it observed, gated by key hash. One fact —
-            (home, away) in half-points — settles every market on the event, because each claim
-            derives its own outcome from that fact in-circuit. This panel posts that same fact by
-            hand so the whole path is demonstrable today.
+            Resolution is a 2-of-3 committee, in the contract: three seats, three key hashes sealed
+            at deploy, and an event only settles once two seats file the same score. Three seats
+            that disagree leave the event disputed, which refunds rather than guesses. In production
+            each seat is a separate daemon on a different sports-data provider; this panel holds all
+            three, so posting a score here is two transactions, not one.
           </p>
         </AlertDescription>
       </Alert>
@@ -105,12 +105,14 @@ export function OraclePanel() {
         <CardHeader>
           <CardTitle>Deployment</CardTitle>
           <CardDescription>
-            One contract holds every market. The oracle key is fixed at deploy and lives only in the
-            deploying browser's private state.
+            One contract holds every market. Deploying seals three committee seats; this browser
+            keeps whichever seat secrets it generated, and they never leave it.
           </CardDescription>
           <CardAction>
             {isOracle ? (
-              <Badge>You hold the oracle key</Badge>
+              <Badge>
+                {settings.oracleSeats.length} of 3 seats held
+              </Badge>
             ) : (
               <Badge variant="outline">Read-only</Badge>
             )}
@@ -306,8 +308,9 @@ export function OraclePanel() {
             <CardHeader>
               <CardTitle>Post the fact</CardTitle>
               <CardDescription>
-                One transaction settles every market on the event. Nothing iterates: each claim
-                derives its own result from this score.
+                Two seats must agree before anything settles, so this files twice. Once quorum is
+                reached, that single fact settles every market on the event — nothing iterates, each
+                claim derives its own result from the score.
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -360,14 +363,14 @@ export function OraclePanel() {
                 disabled={!scoreEvent || !!busy}
                 onClick={guard(() => postScore(scoreEvent!, Number(homeScore), Number(awayScore)))}
               >
-                Post score
+                File score from two seats
               </Button>
               <Button
                 variant="outline"
                 disabled={!scoreEvent || !!busy}
                 onClick={guard(() => voidEvent(scoreEvent!))}
               >
-                Void (postponed / abandoned)
+                Void (postponed, abandoned or disputed)
               </Button>
             </CardFooter>
           </Card>
@@ -386,6 +389,7 @@ export function OraclePanel() {
                 <span>{nameOf(event.id)}</span>
                 <span className="font-mono text-xs tabular-nums text-muted-foreground">
                   {event.status === 'FINAL' ? scoreText(event) : event.status.toLowerCase()} ·{' '}
+                  {event.reports.filter((r) => r.filed).length}/3 seats ·{' '}
                   {board.markets.filter((m) => m.eventId === event.id).length} markets
                 </span>
               </div>

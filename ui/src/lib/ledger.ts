@@ -12,7 +12,9 @@ import type { Board, ChainEvent, ChainMarket } from './odds.ts';
 
 export { readLedger, pureCircuits };
 
-const STATUS = ['PENDING', 'FINAL', 'VOID'] as const;
+const STATUS = ['PENDING', 'FINAL', 'VOID', 'DISPUTED'] as const;
+
+const EMPTY_REPORT = { filed: false, homeScore2: 0, awayScore2: 0 };
 
 let publicProvider: ReturnType<typeof indexerPublicDataProvider> | null = null;
 let providerFor = '';
@@ -40,11 +42,22 @@ export const readLedgerState = async (address: string) => {
 export const readBoard = async (address: string): Promise<Board> => {
   const l = await readLedgerState(address);
 
+  const reportsFor = (key: Uint8Array) => {
+    if (!l.reports.member(key)) return [EMPTY_REPORT, EMPTY_REPORT, EMPTY_REPORT];
+    const set = l.reports.lookup(key);
+    return [set.r0, set.r1, set.r2].map((r: any) => ({
+      filed: Boolean(r.filed),
+      homeScore2: Number(r.h2),
+      awayScore2: Number(r.a2),
+    }));
+  };
+
   const events: ChainEvent[] = [...l.events].map(([k, v]: any) => ({
     id: hex(k),
     homeScore2: Number(v.homeScore2),
     awayScore2: Number(v.awayScore2),
     status: STATUS[Number(v.status)] ?? 'PENDING',
+    reports: reportsFor(k),
   }));
 
   const markets: ChainMarket[] = [...l.markets].map(([k, v]: any) => ({
@@ -59,7 +72,7 @@ export const readBoard = async (address: string): Promise<Board> => {
 
   return {
     address,
-    oracleKeyHash: hex(l.oracleKeyHash),
+    oracleKeyHashes: [hex(l.oracleKeyHash0), hex(l.oracleKeyHash1), hex(l.oracleKeyHash2)],
     events,
     markets,
     // Leaves in the one shared commitment tree: the crowd every claim hides in.

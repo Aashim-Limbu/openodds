@@ -7,7 +7,14 @@ export const MONEYLINE = 0;
 export const SPREAD = 1;
 export const TOTAL = 2;
 
-export type EventStatusName = 'PENDING' | 'FINAL' | 'VOID';
+export type EventStatusName = 'PENDING' | 'FINAL' | 'VOID' | 'DISPUTED';
+
+/** What one committee seat has filed for an event, if anything. */
+export interface SeatReport {
+  filed: boolean;
+  homeScore2: number;
+  awayScore2: number;
+}
 
 export interface ChainEvent {
   id: string;
@@ -15,6 +22,8 @@ export interface ChainEvent {
   homeScore2: number;
   awayScore2: number;
   status: EventStatusName;
+  /** always three, one per seat */
+  reports: SeatReport[];
 }
 
 export interface ChainMarket {
@@ -30,7 +39,8 @@ export interface ChainMarket {
 
 export interface Board {
   address: string;
-  oracleKeyHash: string;
+  /** the three sealed committee key hashes */
+  oracleKeyHashes: string[];
   events: ChainEvent[];
   markets: ChainMarket[];
   anonymitySet: number;
@@ -62,7 +72,8 @@ export const resultOf = (m: ChainMarket, f: ChainEvent): 0 | 1 | 2 => {
 export type Settlement = 'PENDING' | 'WON' | 'LOST' | 'PUSH' | 'VOID';
 
 export const settlementOf = (m: ChainMarket, f: ChainEvent | undefined, outcome: 0 | 1): Settlement => {
-  if (!f || f.status === 'PENDING') return 'PENDING';
+  // DISPUTED pays nothing until a seat voids it, so it reads as still open.
+  if (!f || f.status === 'PENDING' || f.status === 'DISPUTED') return 'PENDING';
   if (f.status === 'VOID') return 'VOID';
   const result = resultOf(m, f);
   if (result === 2) return 'PUSH';

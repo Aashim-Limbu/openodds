@@ -37,12 +37,22 @@ export class OpenOddsSimulator {
   readonly contract: Contract<OpenOddsPrivateState>;
   circuitContext: CircuitContext<OpenOddsPrivateState>;
 
-  constructor(initial: OpenOddsPrivateState, oracleKeyHash: Uint8Array) {
+  /** the three committee seat secrets, so a test can file as any of them */
+  readonly seats: readonly Uint8Array[];
+
+  constructor(
+    initial: OpenOddsPrivateState,
+    oracleKeyHashes: readonly Uint8Array[],
+    seats: readonly Uint8Array[] = [],
+  ) {
     this.contract = new Contract<OpenOddsPrivateState>(witnesses);
+    this.seats = seats;
     const { currentPrivateState, currentContractState, currentZswapLocalState } =
       this.contract.initialState(
         createConstructorContext(initial, "0".repeat(64)),
-        oracleKeyHash,
+        oracleKeyHashes[0],
+        oracleKeyHashes[1],
+        oracleKeyHashes[2],
       );
     this.circuitContext = {
       currentPrivateState,
@@ -99,7 +109,9 @@ export class OpenOddsSimulator {
     return this.getLedger();
   }
 
-  postScore(eventId: Uint8Array, h2: bigint, a2: bigint): Ledger {
+  /** One seat files its observation. Quorum is 2-of-3, so one call rarely settles. */
+  report(seat: number, eventId: Uint8Array, h2: bigint, a2: bigint): Ledger {
+    if (this.seats[seat]) this.patchUser({ oracleSecretKey: this.seats[seat] });
     this.circuitContext = this.contract.impureCircuits.postScore(
       this.circuitContext,
       eventId,
@@ -107,6 +119,12 @@ export class OpenOddsSimulator {
       a2,
     ).context;
     return this.getLedger();
+  }
+
+  /** Two seats agreeing — the normal path to a settled event. */
+  postScore(eventId: Uint8Array, h2: bigint, a2: bigint): Ledger {
+    this.report(0, eventId, h2, a2);
+    return this.report(1, eventId, h2, a2);
   }
 
   voidEvent(eventId: Uint8Array): Ledger {

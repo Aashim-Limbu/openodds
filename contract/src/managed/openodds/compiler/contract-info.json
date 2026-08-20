@@ -450,7 +450,7 @@
   ],
   "ledger": [
     {
-      "name": "oracleKeyHash",
+      "name": "oracleKeyHash0",
       "index": 0,
       "exported": true,
       "storage": "Cell",
@@ -460,8 +460,131 @@
       }
     },
     {
-      "name": "markets",
+      "name": "oracleKeyHash1",
       "index": 1,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "oracleKeyHash2",
+      "index": 2,
+      "exported": true,
+      "storage": "Cell",
+      "type": {
+        "type-name": "Bytes",
+        "length": 32
+      }
+    },
+    {
+      "name": "reports",
+      "index": 3,
+      "exported": true,
+      "storage": "Map",
+      "key": {
+        "type-name": "Bytes",
+        "length": 32
+      },
+      "value": {
+        "type-name": "Struct",
+        "name": "ReportSet",
+        "elements": [
+          {
+            "name": "r0",
+            "type": {
+              "type-name": "Struct",
+              "name": "Report",
+              "elements": [
+                {
+                  "name": "h2",
+                  "type": {
+                    "type-name": "Uint",
+                    "maxval": 65535
+                  }
+                },
+                {
+                  "name": "a2",
+                  "type": {
+                    "type-name": "Uint",
+                    "maxval": 65535
+                  }
+                },
+                {
+                  "name": "filed",
+                  "type": {
+                    "type-name": "Boolean"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "r1",
+            "type": {
+              "type-name": "Struct",
+              "name": "Report",
+              "elements": [
+                {
+                  "name": "h2",
+                  "type": {
+                    "type-name": "Uint",
+                    "maxval": 65535
+                  }
+                },
+                {
+                  "name": "a2",
+                  "type": {
+                    "type-name": "Uint",
+                    "maxval": 65535
+                  }
+                },
+                {
+                  "name": "filed",
+                  "type": {
+                    "type-name": "Boolean"
+                  }
+                }
+              ]
+            }
+          },
+          {
+            "name": "r2",
+            "type": {
+              "type-name": "Struct",
+              "name": "Report",
+              "elements": [
+                {
+                  "name": "h2",
+                  "type": {
+                    "type-name": "Uint",
+                    "maxval": 65535
+                  }
+                },
+                {
+                  "name": "a2",
+                  "type": {
+                    "type-name": "Uint",
+                    "maxval": 65535
+                  }
+                },
+                {
+                  "name": "filed",
+                  "type": {
+                    "type-name": "Boolean"
+                  }
+                }
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "markets",
+      "index": 4,
       "exported": true,
       "storage": "Map",
       "key": {
@@ -510,7 +633,7 @@
     },
     {
       "name": "events",
-      "index": 2,
+      "index": 5,
       "exported": true,
       "storage": "Map",
       "key": {
@@ -543,7 +666,8 @@
               "elements": [
                 "PENDING",
                 "FINAL",
-                "VOID"
+                "VOID",
+                "DISPUTED"
               ]
             }
           },
@@ -558,7 +682,7 @@
     },
     {
       "name": "pools",
-      "index": 3,
+      "index": 6,
       "exported": true,
       "storage": "Map",
       "key": {
@@ -572,7 +696,7 @@
     },
     {
       "name": "commitments",
-      "index": 4,
+      "index": 7,
       "exported": true,
       "storage": "HistoricMerkleTree",
       "depth": 12,
@@ -583,7 +707,7 @@
     },
     {
       "name": "nullifiers",
-      "index": 5,
+      "index": 8,
       "exported": true,
       "storage": "Set",
       "type": {
@@ -593,7 +717,7 @@
     },
     {
       "name": "treasury",
-      "index": 6,
+      "index": 9,
       "exported": true,
       "storage": "Cell",
       "type": {
@@ -633,7 +757,7 @@
     },
     {
       "name": "treasuryFunded",
-      "index": 7,
+      "index": 10,
       "exported": true,
       "storage": "Cell",
       "type": {
