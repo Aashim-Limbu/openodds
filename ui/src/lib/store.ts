@@ -93,6 +93,26 @@ export const fetchPublishedSlate = async (): Promise<Slate | null> => {
   }
 };
 
+/**
+ * The shared, pre-funded demo wallet: a seed we publish on purpose, plus a
+ * snapshot of its synced state so a visitor is transacting in seconds rather
+ * than minutes. Testnet money, no real value.
+ */
+export interface DemoWallet {
+  seed: string;
+  snapshot: { shielded: string; unshielded: string; dust: string; takenAt?: string; appliedIndex?: string };
+}
+
+export const fetchDemoWallet = async (): Promise<DemoWallet | null> => {
+  try {
+    const r = await fetch('/demo-wallet.json', { cache: 'no-store' });
+    if (!r.ok) return null;
+    return (await r.json()) as DemoWallet;
+  } catch {
+    return null;
+  }
+};
+
 export const download = (filename: string, data: unknown) => {
   const url = URL.createObjectURL(
     new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' }),

@@ -19,6 +19,7 @@ import { claimableTickets } from '../lib/odds.ts';
 import { deriveSecret, masterFromSeed, nextFreeIndex, scanPositions } from '../lib/recovery.ts';
 import {
   DEFAULT_SETTINGS,
+  fetchDemoWallet,
   fetchPublishedSlate,
   load,
   newId,
@@ -67,6 +68,9 @@ export interface OpenOddsApi {
   connectError: string | null;
   connectLog: string[];
   connect: () => Promise<void>;
+  /** the published pre-funded wallet, if this deployment ships one */
+  demoWallet: { seed: string; takenAt?: string } | null;
+  useDemoWallet: () => void;
 
   isOracle: boolean;
   busy: Busy | null;
@@ -113,6 +117,7 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
   const [activity, setActivity] = useState<Entry[]>([]);
   /** hashes of the seats this browser holds, for matching against the board */
   const [oracleKh, setOracleKh] = useState<string[]>([]);
+  const [demo, setDemo] = useState<Awaited<ReturnType<typeof fetchDemoWallet>>>(null);
 
   const session = useRef<Chain.Session | null>(null);
   /** Set once the write half of the app has been fetched (on connect). */
@@ -139,6 +144,10 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
     state.settings.proofServer,
     state.settings.networkId,
   ]);
+
+  useEffect(() => {
+    void fetchDemoWallet().then(setDemo);
+  }, []);
 
   // A published slate plus ?c=<address> is all a visitor needs to see the board.
   useEffect(() => {
@@ -202,7 +211,10 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
       const mod = await chain.loadChain();
       chainMod.current = mod;
 
-      const ctx = await mod.buildWallet(state.settings.seed.trim(), log);
+      // The snapshot only fits the wallet it was taken from.
+      const seed = state.settings.seed.trim();
+      const snapshot = demo && demo.seed === seed ? demo.snapshot : null;
+      const ctx = await mod.buildWallet(seed, log, snapshot);
       const providers = await mod.configureProviders(ctx);
       const coinPk = providers.walletProvider.getCoinPublicKey();
 
@@ -223,7 +235,7 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
     } finally {
       setConnecting(false);
     }
-  }, [address, note, state.settings]);
+  }, [address, demo, note, state.settings]);
 
   useEffect(() => () => stopBalances.current?.(), []);
 
@@ -514,6 +526,10 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
     connectError,
     connectLog,
     connect,
+    demoWallet: demo ? { seed: demo.seed, takenAt: demo.snapshot.takenAt } : null,
+    useDemoWallet: () => {
+      if (demo) updateSettings({ seed: demo.seed });
+    },
     // we hold a seat if any of our seat hashes is sealed into this contract
     isOracle: !!board && board.oracleKeyHashes.some((h) => oracleKh.includes(h)),
     busy,

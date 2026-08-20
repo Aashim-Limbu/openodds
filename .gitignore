@@ -5,3 +5,4 @@ midnight-level-db/
 logs/
 ui/dist/
 .preview-wallets.json
+snapshots/

@@ -96,6 +96,19 @@ export interface WalletContext {
   unshieldedKeystore: UnshieldedKeystore;
 }
 
+/**
+ * A frozen wallet state. A cold wallet applies every index from genesis —
+ * ~133k of them on preview, twelve minutes before a first transaction. A
+ * restored wallet applies only what happened since the snapshot was taken.
+ */
+export interface WalletSnapshot {
+  shielded: string;
+  unshielded: string;
+  dust: string;
+  takenAt?: string;
+  appliedIndex?: string;
+}
+
 export interface Balances {
   night: bigint;
   shielded: bigint;
@@ -114,7 +127,11 @@ const deriveKeysFromSeed = (seed: string) => {
   return result.keys;
 };
 
-export const buildWallet = async (seed: string, log: Log): Promise<WalletContext> => {
+export const buildWallet = async (
+  seed: string,
+  log: Log,
+  snapshot?: WalletSnapshot | null,
+): Promise<WalletContext> => {
   const keys = deriveKeysFromSeed(seed);
   const shieldedSecretKeys = ledger.ZswapSecretKeys.fromSeed(keys[Roles.Zswap]);
   const dustSecretKey = ledger.DustSecretKey.fromSeed(keys[Roles.Dust]);
@@ -132,13 +149,25 @@ export const buildWallet = async (seed: string, log: Log): Promise<WalletContext
       txHistoryStorage: new NoOpTransactionHistoryStorage() as never,
       costParameters: { additionalFeeOverhead: 500_000_000_000_000_000n, feeBlocksMargin: 5 },
     },
-    shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
-    unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
+    shielded: (cfg) =>
+      snapshot
+        ? ShieldedWallet(cfg).restore(snapshot.shielded)
+        : ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
+    unshielded: (cfg) =>
+      snapshot
+        ? UnshieldedWallet(cfg).restore(snapshot.unshielded)
+        : UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(unshieldedKeystore)),
     dust: (cfg) =>
-      DustWallet(cfg).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
+      snapshot
+        ? DustWallet(cfg).restore(snapshot.dust)
+        : DustWallet(cfg).startWithSecretKey(dustSecretKey, ledger.LedgerParameters.initialParameters().dust),
   });
   await wallet.start(shieldedSecretKeys, dustSecretKey);
-  log('wallet started, syncing…');
+  log(
+    snapshot
+      ? `restored from a snapshot taken ${snapshot.takenAt ?? 'earlier'} — applying the delta…`
+      : 'wallet started, cold sync from genesis — this takes minutes…',
+  );
 
   const synced = await Rx.firstValueFrom(wallet.state().pipe(Rx.filter((s) => s.isSynced)));
   const night = synced.unshielded.balances[unshieldedToken().raw] ?? 0n;

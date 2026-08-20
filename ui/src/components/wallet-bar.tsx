@@ -29,7 +29,7 @@ const ENDPOINTS = [
 ] as const;
 
 export function WalletBar() {
-  const { wallet, connect, connecting, connectError, connectLog, settings, updateSettings } =
+  const { wallet, connect, connecting, connectError, connectLog, settings, updateSettings, demoWallet, useDemoWallet } =
     useOpenOdds();
   const [open, setOpen] = useState(false);
 
@@ -78,6 +78,28 @@ export function WalletBar() {
                   <span className="font-mono text-xs">{shortId(wallet.coinPk)}</span>
                 </div>
               </div>
+            )}
+
+            {demoWallet && (
+              <Alert>
+                <AlertTitle>Nothing to install, nothing to fund</AlertTitle>
+                <AlertDescription>
+                  <p>
+                    This deployment ships a shared, pre-funded testnet wallet with a snapshot of its
+                    synced state, so it is ready in seconds instead of the twelve minutes a cold
+                    wallet needs to scan the chain. It is public and shared — treat anything in it
+                    as everyone's.
+                  </p>
+                  <Button
+                    variant={settings.seed === demoWallet.seed ? 'outline' : 'default'}
+                    size="sm"
+                    disabled={settings.seed === demoWallet.seed}
+                    onClick={useDemoWallet}
+                  >
+                    {settings.seed === demoWallet.seed ? 'Demo wallet selected' : 'Use the demo wallet'}
+                  </Button>
+                </AlertDescription>
+              </Alert>
             )}
 
             <FieldGroup>
