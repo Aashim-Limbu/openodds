@@ -23,7 +23,7 @@ import { PublicKey, UnshieldedWallet } from '@midnight-ntwrk/wallet-sdk-unshield
 import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstractions';
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 
-import { PreviewConfig, currentDir, type Config } from './config.ts';
+import { PreviewConfig, currentDir, type Config, DUST_FEE_OVERHEAD } from './config.ts';
 import {
   buildWalletAndWaitForFunds,
   configureProviders,
@@ -124,7 +124,7 @@ const buildRestored = async (cfg: Config, seed: string, snap: WalletSnapshot) =>
       provingServerUrl: new URL(cfg.proofServer),
       relayURL: new URL(cfg.node.replace(/^http/, 'ws')),
       txHistoryStorage: new NoOpTransactionHistoryStorage() as never,
-      costParameters: { additionalFeeOverhead: 500_000_000_000_000_000n, feeBlocksMargin: 5 },
+      costParameters: { additionalFeeOverhead: DUST_FEE_OVERHEAD, feeBlocksMargin: 5 },
     },
     shielded: (c) => ShieldedWallet(c).restore(snap.shielded),
     unshielded: (c) => UnshieldedWallet(c).restore(snap.unshielded),

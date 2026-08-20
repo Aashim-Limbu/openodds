@@ -9,6 +9,14 @@ export const contractConfig = {
   zkConfigPath: path.resolve(currentDir, '..', '..', 'contract', 'src', 'managed', 'openodds'),
 };
 
+/**
+ * Safety margin added on top of the estimated fee. The 5e17 we inherited from
+ * the local-stack example is 0.5 DUST — fine for a genesis wallet with an
+ * effectively infinite balance, fatal on a faucet-funded one, which holds about
+ * 0.02 DUST and could not even pay to register its NIGHT for dust generation.
+ */
+export const DUST_FEE_OVERHEAD = 1_000_000_000_000_000n; // 0.001 DUST
+
 export interface Config {
   readonly indexer: string;
   readonly indexerWS: string;

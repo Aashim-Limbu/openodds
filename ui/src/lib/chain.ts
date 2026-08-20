@@ -42,6 +42,7 @@ import { pureCircuits } from './ledger.ts';
 import {
   NATIVE_COLOR,
   OpenOddsPrivateStateId,
+  DUST_FEE_OVERHEAD,
   TICKET_PRICE,
   config,
   rand32,
@@ -147,7 +148,7 @@ export const buildWallet = async (
       provingServerUrl,
       relayURL,
       txHistoryStorage: new NoOpTransactionHistoryStorage() as never,
-      costParameters: { additionalFeeOverhead: 500_000_000_000_000_000n, feeBlocksMargin: 5 },
+      costParameters: { additionalFeeOverhead: DUST_FEE_OVERHEAD, feeBlocksMargin: 5 },
     },
     shielded: (cfg) =>
       snapshot

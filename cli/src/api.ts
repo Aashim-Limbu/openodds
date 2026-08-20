@@ -22,7 +22,7 @@ import {
 import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstractions';
 import * as Rx from 'rxjs';
 import { WebSocket } from 'ws';
-import { type Config, contractConfig } from './config.ts';
+import { type Config, contractConfig, DUST_FEE_OVERHEAD } from './config.ts';
 import { levelPrivateStateProvider } from '@midnight-ntwrk/midnight-js-level-private-state-provider';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js/network-id';
 import { CompiledContract } from '@midnight-ntwrk/compact-js';
@@ -192,7 +192,7 @@ const buildDustConfig = ({ indexer, indexerWS, node, proofServer }: Config) => (
   costParameters: {
     // undeployed network needs the full testkit default; lower values fail
     // node-side with BalanceCheckOverspend (error 138) — see example-bboard README
-    additionalFeeOverhead: 500_000_000_000_000_000n,
+    additionalFeeOverhead: DUST_FEE_OVERHEAD,
     feeBlocksMargin: 5,
   },
   indexerClientConnection: { indexerHttpUrl: indexer, indexerWsUrl: indexerWS },

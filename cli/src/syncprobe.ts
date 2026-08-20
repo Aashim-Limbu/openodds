@@ -10,7 +10,7 @@ import { NoOpTransactionHistoryStorage } from '@midnight-ntwrk/wallet-sdk-abstra
 import * as ledger from '@midnight-ntwrk/ledger-v8';
 import { getNetworkId } from '@midnight-ntwrk/midnight-js/network-id';
 import { Buffer } from 'node:buffer';
-import { PreviewConfig } from './config.ts';
+import { PreviewConfig, DUST_FEE_OVERHEAD } from './config.ts';
 import { seedFor } from './preview.ts';
 
 const config = new PreviewConfig();
@@ -30,7 +30,7 @@ const wallet = await WalletFacade.init({
     provingServerUrl: new URL(config.proofServer),
     relayURL: new URL(config.node.replace(/^http/, 'ws')),
     txHistoryStorage: new NoOpTransactionHistoryStorage() as never,
-    costParameters: { additionalFeeOverhead: 500_000_000_000_000_000n, feeBlocksMargin: 5 },
+    costParameters: { additionalFeeOverhead: DUST_FEE_OVERHEAD, feeBlocksMargin: 5 },
   },
   shielded: (cfg) => ShieldedWallet(cfg).startWithSecretKeys(shieldedSecretKeys),
   unshielded: (cfg) => UnshieldedWallet(cfg).startWithPublicKey(PublicKey.fromKeyStore(ks)),
