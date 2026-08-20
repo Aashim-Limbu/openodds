@@ -155,10 +155,14 @@ export function OpenOddsProvider({ children }: { children: ReactNode }) {
       const published = await fetchPublishedSlate();
       const fromUrl = new URLSearchParams(location.search).get('c');
       if (!published && !fromUrl) return;
+      // A published deployment says which chain it lives on; adopt it unless the
+      // visitor has already pointed the app somewhere themselves.
+      const preset = published?.network ? chain.NETWORKS[published.network] : undefined;
       setState((prev) => ({
         ...prev,
         settings: {
           ...prev.settings,
+          ...(preset && prev.settings.contract === '' ? preset : {}),
           contract: fromUrl ?? prev.settings.contract ?? published?.contract ?? '',
         },
         slate: {

@@ -16,7 +16,7 @@ import { Field, FieldDescription, FieldGroup, FieldLabel } from '@/components/ui
 import { Input } from '@/components/ui/input';
 import { Separator } from '@/components/ui/separator';
 import { Spinner } from '@/components/ui/spinner';
-import { HOSTED_PROOF_SERVER } from '@/lib/midnight';
+import { HOSTED_PROOF_SERVER, LOCAL_STACK, PREVIEW_NET } from '@/lib/midnight';
 import { fmtInt, shortId } from '@/lib/odds';
 import { useOpenOdds } from '@/state/openodds';
 
@@ -101,6 +101,24 @@ export function WalletBar() {
                 </AlertDescription>
               </Alert>
             )}
+
+            <div className="flex items-center gap-2">
+              <span className="text-sm text-muted-foreground">Network</span>
+              <Button
+                variant={settings.networkId === 'preview' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => updateSettings(PREVIEW_NET)}
+              >
+                Preview testnet
+              </Button>
+              <Button
+                variant={settings.networkId === 'undeployed' ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => updateSettings(LOCAL_STACK)}
+              >
+                Local stack
+              </Button>
+            </div>
 
             <FieldGroup>
               <Field>

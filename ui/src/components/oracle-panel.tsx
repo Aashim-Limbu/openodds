@@ -142,7 +142,11 @@ export function OraclePanel() {
             variant="ghost"
             disabled={!settings.contract}
             onClick={() =>
-              download('slate.json', { contract: settings.contract, events: slate.events })
+              download('slate.json', {
+                contract: settings.contract,
+                network: settings.networkId === 'preview' ? 'preview' : 'local',
+                events: slate.events,
+              })
             }
           >
             <DownloadIcon data-icon="inline-start" />

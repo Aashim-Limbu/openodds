@@ -34,6 +34,21 @@ export const LOCAL_STACK: ChainConfig = {
 /** Verified alive, CORS-open, v8.0.3 — but it sees your witnesses. See PrivacyPanel. */
 export const HOSTED_PROOF_SERVER = 'https://proof-server.preview.midnight.network';
 
+/** Public preview testnet. Every endpoint probed live: prover 8.0.3, rpc healthy, indexer on v3. */
+export const PREVIEW_NET: ChainConfig = {
+  indexer: 'https://indexer.preview.midnight.network/api/v3/graphql',
+  indexerWS: 'wss://indexer.preview.midnight.network/api/v3/graphql/ws',
+  node: 'https://rpc.preview.midnight.network',
+  proofServer: HOSTED_PROOF_SERVER,
+  networkId: 'preview',
+};
+
+/** A deployment declares which of these it is; see slate.json. */
+export const NETWORKS: Record<string, ChainConfig> = {
+  local: LOCAL_STACK,
+  preview: PREVIEW_NET,
+};
+
 export const config: ChainConfig & { zkBaseUrl: string } = {
   ...LOCAL_STACK,
   zkBaseUrl: `${location.origin}/zk`,

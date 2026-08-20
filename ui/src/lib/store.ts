@@ -32,6 +32,8 @@ export interface EventMeta {
 /** Names are off-chain by necessity: Compact has no strings. */
 export interface Slate {
   contract?: string;
+  /** which network this deployment lives on — 'local' or 'preview' */
+  network?: string;
   events: Record<string, EventMeta>;
 }
 
@@ -87,7 +89,7 @@ export const fetchPublishedSlate = async (): Promise<Slate | null> => {
     const r = await fetch('/slate.json', { cache: 'no-store' });
     if (!r.ok) return null;
     const j = (await r.json()) as Slate;
-    return { contract: j.contract, events: j.events ?? {} };
+    return { contract: j.contract, network: j.network, events: j.events ?? {} };
   } catch {
     return null;
   }
