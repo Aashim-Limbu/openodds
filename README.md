@@ -39,6 +39,41 @@ Money is only ever in contract escrow or in a bettor's own wallet. There is no a
 over escrow and no way for anyone — including us — to freeze or reverse a position
 ([ADR 0002](docs/adr/0002-permissionless-protocol-no-custody.md)).
 
+## How it uses Midnight
+
+Midnight keeps two ledgers, and a betting market needs both — that split is the whole
+reason this contract can exist here and not on a transparent chain.
+
+**The public ledger holds what a market must publish.** Pool totals, the line, the
+event's score once the committee agrees, the commitment tree root, and the spent
+nullifier set all live in on-chain state: `markets`, `events`, `pools`, `reports`, and a
+`HistoricMerkleTree(12)` of commitments. Pools are public on purpose — pools *are* the
+odds, and a market that hides them is not a market.
+
+**The shielded ledger carries the money.** A stake arrives as a Zswap shielded coin, which
+has no payer field, so the ledger records that a stake landed without recording whose it
+was. A claim pays out to a fresh shielded output, unlinkable to the input that funded it.
+
+**Private state holds what only the bettor knows.** The position secret never leaves the
+browser; it is a witness. `placeBet` inserts `commitment = H(secret ‖ marketId ‖ outcome ‖
+tickets)` and `claim` proves in-circuit that the commitment sits in the tree, burns a
+market-scoped nullifier so it cannot be claimed twice, derives the payout from the public
+score, and pays out — without ever disclosing which commitment was used. Person and
+position are never on the ledger together.
+
+Two Compact specifics worth naming, because both cost real time:
+
+- The contract branches on witness-derived comparisons in `oracleSlot()`, which the
+  information-flow checker rejects until each comparison is wrapped in `disclose()`. What
+  is disclosed is only *which seat* is reporting, never the seat's secret.
+- Committee seats authenticate by proving knowledge of a preimage rather than by signing,
+  because Compact has no signature-verification circuit. The three seat hashes are sealed
+  into the contract at deploy.
+
+Resolution is computed **at claim time, not at resolve time**: one fact per event
+(`homeScore`, `awayScore`, flags) settles every market on it, and each claim derives its
+own win, push or refund from that fact in-circuit ([ADR 0001](docs/adr/0001-one-fact-per-event.md)).
+
 ## What works today
 
 The whole path runs end to end in a browser against a local Midnight stack, verified by
@@ -140,6 +175,11 @@ cd ui && npm run build       # production build; copies the ZK artifacts into pu
 tells a bettor they are owed matches what the claim circuit will actually pay,
 including the exact quotient inequality the circuit verifies.
 
-## Licence
+## Licence and attribution
 
-Apache-2.0.
+Licensed under the Apache License 2.0 — see [LICENSE](LICENSE).
+
+Built on [Midnight](https://midnight.network) with the Compact language and the
+`@midnight-ntwrk` SDK family. The privacy model leans on Midnight's Zswap shielded
+tokens and its dual-ledger design; the local development stack is Midnight's own
+published node, indexer and proof server images.
